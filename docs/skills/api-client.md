@@ -164,6 +164,90 @@ export const contractsApi = {
 }
 ```
 
+Un segundo ejemplo — cliente de cobros (`payments`), mismo patrón aplicado a otro dominio. Los endpoints, filtros y campos exactos los define `sdd_03_api_contracts.md` cuando exista; lo que se ejemplifica acá es la mecánica del cliente (tipos generados, envoltura `{ data, meta }`, uso posterior con TanStack Query), no el contrato final.
+
+```typescript
+// src/api/payments.api.ts
+import { httpClient } from './http-client'
+import type {
+  Payment,
+  PaymentListResponse,
+  PaymentCreateRequest,
+} from './generated'   // ← tipos del OpenAPI del backend local
+
+type Filters = {
+  contract_id?: string
+  from?: string
+  to?: string
+  cursor?: string
+  limit?: number
+}
+
+export const paymentsApi = {
+  async list(filters: Filters, opts?: { signal?: AbortSignal }): Promise<PaymentListResponse> {
+    // SDD: sdd_03 §"Cobros" GET /payments — listado de cobros, filtrable por contrato y rango de fechas
+    const response = await httpClient.get<PaymentListResponse>('/payments', {
+      params: filters,
+      signal: opts?.signal,
+    })
+    return response.data
+  },
+
+  async get(paymentId: string, opts?: { signal?: AbortSignal }): Promise<{ data: Payment }> {
+    const response = await httpClient.get<{ data: Payment }>(`/payments/${paymentId}`, {
+      signal: opts?.signal,
+    })
+    return response.data
+  },
+
+  async create(payload: PaymentCreateRequest): Promise<{ data: Payment }> {
+    // SDD: sdd_03 §"Cobros" POST /payments — registrar un cobro contra un contrato
+    // El backend valida el saldo (RN-P03); si el monto excede lo pendiente,
+    // retorna 422 PAYMENT_EXCEEDS_CONTRACT_BALANCE (ver error-handling.md).
+    const response = await httpClient.post<{ data: Payment }>('/payments', payload)
+    return response.data
+  },
+}
+```
+
+Hook TanStack Query consumiendo `paymentsApi` — misma convención que `contractsApi`:
+
+```typescript
+// src/modules/payments/hooks/usePaymentsList.ts
+import { useQuery } from '@tanstack/react-query'
+import { paymentsApi } from '@/api/payments.api'
+
+export function usePaymentsList(filters: { contract_id?: string; from?: string; to?: string } = {}) {
+  return useQuery({
+    queryKey: ['payments', 'list', filters],
+    queryFn: ({ signal }) => paymentsApi.list(filters, { signal }),
+    staleTime: 5 * 60_000,   // según sdd_04 §1.4
+  })
+}
+```
+
+```typescript
+// src/modules/payments/hooks/useCreatePayment.ts
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { paymentsApi } from '@/api/payments.api'
+import { AdminPropApiError } from '@/api/errors'
+
+export function useCreatePayment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: paymentsApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })   // el saldo del contrato cambió
+    },
+    onError: (error: AdminPropApiError) => {
+      // error.code === 'PAYMENT_EXCEEDS_CONTRACT_BALANCE' se maneja en el
+      // componente del form (ver error-handling.md §"Errores de validación → field-level")
+    },
+  })
+}
+```
+
 ### Configuración de TanStack Query
 
 ```typescript
