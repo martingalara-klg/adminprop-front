@@ -1,0 +1,274 @@
+name: CI
+
+# CI del frontend — lint + typecheck + tests (Vitest + Playwright) + build de validación.
+# Trigger: PR hacia develop o main, push directo a develop.
+# Refs: RUNBOOK-LOCAL-002, CLAUDE.md §3.
+#
+# Guard: hasta que exista package.json (primeras issues de scaffolding),
+# todos los jobs corren en no-op — evita que el CI falle en rojo antes de
+# que el proyecto tenga código de aplicación.
+#
+# Sin CD todavía: este workflow solo corre CI. El deploy se incorpora
+# cuando exista infra.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+
+  # ── Lint + typecheck ─────────────────────────────────────────────────────────
+  quality:
+    name: Lint & typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip si el proyecto aún no está scaffoldeado
+        id: guard
+        run: |
+          if [ ! -f package.json ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Proyecto sin scaffolding todavía — CI en no-op"
+          fi
+
+      - name: Set up Node
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.guard.outputs.skip != 'true'
+        run: npm run lint
+
+      - name: Typecheck
+        if: steps.guard.outputs.skip != 'true'
+        run: npm run typecheck
+
+  # ── Tests unitarios + integración (Vitest) ────────────────────────────────────
+  unit-tests:
+    name: Vitest unit + integration
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip si el proyecto aún no está scaffoldeado
+        id: guard
+        run: |
+          if [ ! -f package.json ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Proyecto sin scaffolding todavía — CI en no-op"
+          fi
+
+      - name: Set up Node
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Run Vitest
+        if: steps.guard.outputs.skip != 'true'
+        run: npm test -- --coverage
+        env:
+          VITE_API_BASE_URL: http://localhost:8000/v1
+          VITE_DEFAULT_LOCALE: es-AR
+          VITE_SUPPORTED_LOCALES: es-AR,en-US
+
+      - name: Upload coverage
+        if: always() && steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-vitest
+          path: coverage/
+
+  # ── Tests E2E (Playwright, contra backend local real) ─────────────────────────
+  e2e-tests:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name == 'pull_request'   # E2E solo en PRs, no en cada push a develop
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: adminprop
+          POSTGRES_PASSWORD: adminprop
+          POSTGRES_DB: adminprop_e2e
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip si el proyecto aún no está scaffoldeado
+        id: guard
+        run: |
+          if [ ! -f package.json ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Proyecto sin scaffolding todavía — CI en no-op"
+          fi
+
+      - name: Set up Node
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.guard.outputs.skip != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Clone adminprop-back for E2E
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          git clone https://github.com/martingalara-klg/adminprop-back.git /tmp/adminprop-back
+          cd /tmp/adminprop-back
+          git checkout develop
+
+      - name: Set up Python for backend
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Start backend for E2E
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: /tmp/adminprop-back
+        run: |
+          if [ ! -f pyproject.toml ]; then
+            echo "adminprop-back sin scaffolding todavía — E2E se skippea"
+            exit 0
+          fi
+          pip install -e ".[dev]"
+          PGPASSWORD=adminprop psql -h localhost -U adminprop -d adminprop_e2e -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+          mkdir -p keys
+          openssl genrsa -out keys/private.pem 2048
+          openssl rsa -in keys/private.pem -pubout -out keys/public.pem
+          DATABASE_URL=postgresql+psycopg2://adminprop:adminprop@localhost:5432/adminprop_e2e alembic upgrade head
+          DATABASE_URL=postgresql+psycopg2://adminprop:adminprop@localhost:5432/adminprop_e2e \
+          REDIS_URL=redis://localhost:6379/0 \
+          APP_ENV=test \
+          SECRET_KEY=e2e-secret \
+          JWT_PRIVATE_KEY_PATH=keys/private.pem \
+          JWT_PUBLIC_KEY_PATH=keys/public.pem \
+          CORS_ORIGINS=http://localhost:5173 \
+          RESEND_API_KEY=re_fake-for-tests \
+          uvicorn adminprop.main:app --host 0.0.0.0 --port 8000 &
+          # Wait for backend to be ready
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            curl -s http://localhost:8000/health/liveness && break
+            sleep 3
+          done
+
+      - name: Build frontend for E2E
+        if: steps.guard.outputs.skip != 'true'
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: http://localhost:8000/v1
+          VITE_APP_DOMAIN: localhost:5173
+          VITE_DEFAULT_LOCALE: es-AR
+          VITE_SUPPORTED_LOCALES: es-AR,en-US
+
+      - name: Preview frontend
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          npm run preview -- --port 5173 &
+          sleep 5
+
+      - name: Run Playwright tests
+        if: steps.guard.outputs.skip != 'true'
+        run: npm run e2e
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:5173
+
+      - name: Upload Playwright report
+        if: always() && steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+  # ── Validación de build de producción ─────────────────────────────────────────
+  build-validate:
+    name: Validate production build
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip si el proyecto aún no está scaffoldeado
+        id: guard
+        run: |
+          if [ ! -f package.json ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Proyecto sin scaffolding todavía — CI en no-op"
+          fi
+
+      - name: Set up Node
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install
+        if: steps.guard.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Build production bundle
+        if: steps.guard.outputs.skip != 'true'
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://api.adminprop.local/v1
+          VITE_APP_DOMAIN: app.adminprop.local
+          VITE_DEFAULT_LOCALE: es-AR
+          VITE_SUPPORTED_LOCALES: es-AR,en-US
+          VITE_SENTRY_ENV: ci
+          VITE_APP_VERSION: ${{ github.sha }}
+
+      - name: Validate bundle size
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          MAX_SIZE_MB=2
+          BUNDLE_SIZE=$(du -sm dist | cut -f1)
+          echo "bundle: ${BUNDLE_SIZE}MB"
+          if [ "$BUNDLE_SIZE" -gt "$MAX_SIZE_MB" ]; then
+            echo "❌ bundle (${BUNDLE_SIZE}MB) exceeds ${MAX_SIZE_MB}MB limit"
+            exit 1
+          fi
+          echo "✓ Bundle size OK"
