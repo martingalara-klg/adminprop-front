@@ -257,7 +257,7 @@ Reglas no negociables:
 
 - **Los 6 estados del flujo** tienen UI explícita: `idle`, `loading`, `success`, `error` (discriminado por `error.code`), `expired`, `empty`. Simplificar a "loading/success/error" no es aceptable.
 - **Cada `error.code` del SDD** que el flujo puede ver tiene UX dedicada (page-level / inline / toast — ver `error-handling.md` §"Mapeo error.code → UX"). Nunca catch genérico.
-- **Mensajes de seguridad literales del SDD** (anti-enumeration login, forgot-password, recovery codes, banners de pending_deletion / mfa_via=recovery_code). Vivir en `src/shared/i18n/messages/security.es-AR.ts`.
+- **Mensajes de seguridad literales del SDD** (anti-enumeration login, forgot-password, banners de pending_deletion). Vivir en `src/shared/i18n/messages/security.es-AR.ts`.
 - **Permisos en UI**: `<RequirePermission permission="<perm>">` o `usePermission(<perm>)` — lee del array `permissions[]` del JWT. Nunca por `role_name`. El rol `maintenance` sólo ve órdenes de trabajo asignadas y sus cotizaciones; nunca contratos, cobranzas ni liquidaciones.
 - **Tenant**: `organization` viene del JWT (`useSession()`). El cliente NO envía `organization_id` en ningún request. NO inferir tenant del subdominio (single-domain).
 - **Switch de organización**: no existe endpoint. Si el usuario tiene multi-membresía, flujo aprobado es logout + login.

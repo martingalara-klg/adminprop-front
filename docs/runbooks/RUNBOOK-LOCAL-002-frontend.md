@@ -178,7 +178,7 @@ Para componentes compartidos de `src/shared/components/`.
 |---|---|---|
 | `ECONNREFUSED localhost:8000` en las llamadas API | Backend no está corriendo | `cd ../adminprop-back && make up` |
 | `CORS error` en browser console | Backend no incluye el origin de la app local en `CORS_ORIGINS` | Editar `.env` del backend con `CORS_ORIGINS=http://localhost:5173` y reiniciar (`make down && make up`) |
-| `401 UNAUTHORIZED` con `MFA_TOKEN_INVALID` | El interceptor de refresh no está enviando cookies | Verificar que Axios tiene `withCredentials: true` (debería ser por default en `src/api/http-client.ts`) |
+| `401 UNAUTHORIZED` en `/auth/refresh` | El interceptor de refresh no está enviando cookies | Verificar que Axios tiene `withCredentials: true` (debería ser por default en `src/api/http-client.ts`) |
 | Cookies no llegan al backend | Browser bloquea cookies cross-site con `Secure` en HTTP | El backend setea `Secure: false` cuando `APP_ENV=development` para permitir cookies en HTTP local |
 | `Cannot find module '@/...'` | Alias de TypeScript/Vite mal configurado | Verificar `tsconfig.json` `paths` y `vite.config.ts` `resolve.alias` |
 | `Build error: VITE_*` undefined | Falta `.env.local` o la variable no empieza con `VITE_` | Verificar §2.3 |

@@ -56,7 +56,6 @@ type AuthenticatedResponse = {
         name: string
         slug: string
       }
-      mfa_via?: 'totp' | 'recovery_code'
       account_status: 'active' | 'pending_deletion' | 'anonymized'
       scheduled_anonymization_at?: string
     }
@@ -78,7 +77,6 @@ type Session = {
   permissions: string[]
   organization: { id: string; name: string; slug: string }
   is_super_admin?: boolean
-  mfa_via?: 'totp' | 'recovery_code'
   account_status: 'active' | 'pending_deletion' | 'anonymized'
   scheduled_anonymization_at?: string
 }

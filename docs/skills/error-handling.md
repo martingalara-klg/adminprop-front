@@ -36,9 +36,9 @@ Leer **antes de**:
 | Nivel | UX | Cuándo |
 |---|---|---|
 | **Field-level** | Inline error debajo del input | `VALIDATION_ERROR` con `error.field`, `PASSWORD_POLICY_VIOLATION` |
-| **Inline alert** | Banner dentro del componente activo | Errores de negocio recuperables: `PERIOD_LOCKED`, `LAST_OWNER_REQUIRED`, `PAYMENT_EXCEEDS_CONTRACT_BALANCE` |
-| **Toast** | Notificación efímera abajo/arriba derecha | Errores transversales: `RATE_LIMIT_EXCEEDED`, `INTERNAL_ERROR`, `INDEX_SERVICE_UNAVAILABLE` |
-| **Page-level** | Reemplaza el contenido principal | `NOT_FOUND`, `FORBIDDEN`, `ACCOUNT_LOCKED`, `FEATURE_NOT_ACTIVATED`, `INVITATION_EXPIRED` |
+| **Inline alert** | Banner dentro del componente activo | Errores de negocio recuperables: `CONTRACT_OVERLAP`, `LAST_OWNER_REQUIRED`, `PAYMENT_EXCEEDS_CONTRACT_BALANCE` |
+| **Toast** | Notificación efímera abajo/arriba derecha | Errores transversales: `RATE_LIMIT_EXCEEDED`, `INTERNAL_ERROR` |
+| **Page-level** | Reemplaza el contenido principal | `NOT_FOUND`, `FORBIDDEN`, `ACCOUNT_LOCKED`, `INVITATION_EXPIRED` |
 
 ### Catálogo de mensajes localizables
 
@@ -58,18 +58,13 @@ export const errorMessages = defineMessages({
 
   // Específicos por dominio (sdd_03 §"Códigos de Error Globales")
   ACCOUNT_LOCKED: { id: 'error.ACCOUNT_LOCKED', defaultMessage: 'Tu cuenta está bloqueada por 30 minutos por intentos fallidos.' },
-  MFA_INVALID_CODE: { id: 'error.MFA_INVALID_CODE', defaultMessage: 'El código TOTP es incorrecto o expiró.' },
-  MFA_TOKEN_INVALID: { id: 'error.MFA_TOKEN_INVALID', defaultMessage: 'La sesión de MFA expiró. Volvé a iniciar sesión.' },
-  PERIOD_LOCKED: { id: 'error.PERIOD_LOCKED', defaultMessage: 'El período está bloqueado y no acepta modificaciones.' },
-  PERIOD_OVERLAP: { id: 'error.PERIOD_OVERLAP', defaultMessage: 'El rango se solapa con un período existente.' },
+  CONTRACT_OVERLAP: { id: 'error.CONTRACT_OVERLAP', defaultMessage: 'La propiedad ya tiene un contrato vigente en ese rango de fechas.' },
+  CONTRACT_NOT_ACTIVE: { id: 'error.CONTRACT_NOT_ACTIVE', defaultMessage: 'El contrato no está activo.' },
   INVALID_STATUS_TRANSITION: { id: 'error.INVALID_STATUS_TRANSITION', defaultMessage: 'No se puede cambiar el estado desde el estado actual.' },
   ENTITY_HAS_DEPENDENCIES: { id: 'error.ENTITY_HAS_DEPENDENCIES', defaultMessage: 'No se puede eliminar: hay registros que dependen de este recurso.' },
 
-  FEATURE_NOT_ACTIVATED: { id: 'error.FEATURE_NOT_ACTIVATED', defaultMessage: 'El módulo solicitado no está activado. El owner debe completar el wizard.' },
-  WIZARD_INCOMPLETE: { id: 'error.WIZARD_INCOMPLETE', defaultMessage: 'El wizard tiene pasos pendientes.' },
-
-  INDEX_SERVICE_UNAVAILABLE: { id: 'error.INDEX_SERVICE_UNAVAILABLE', defaultMessage: 'Servicio de índices no disponible (BCRA/INDEC). Reintentá en unos minutos.' },
-  INDEX_VALUE_NOT_FOUND: { id: 'error.INDEX_VALUE_NOT_FOUND', defaultMessage: 'No se encontró el valor del índice para el período solicitado.' },
+  EXCHANGE_RATE_REQUIRED: { id: 'error.EXCHANGE_RATE_REQUIRED', defaultMessage: 'Se requiere el tipo de cambio porque la moneda del pago difiere de la del contrato.' },
+  SETTLEMENT_EXCHANGE_RATE_REQUIRED: { id: 'error.SETTLEMENT_EXCHANGE_RATE_REQUIRED', defaultMessage: 'Se requiere el tipo de cambio para generar la liquidación en USD.' },
   PAYMENT_EXCEEDS_CONTRACT_BALANCE: { id: 'error.PAYMENT_EXCEEDS_CONTRACT_BALANCE', defaultMessage: 'El monto del cobro excede el saldo pendiente del contrato.' },
 
   INVITATION_NOT_FOUND: { id: 'error.INVITATION_NOT_FOUND', defaultMessage: 'Invitación no encontrada.' },
@@ -80,8 +75,8 @@ export const errorMessages = defineMessages({
   INVITATION_PENDING_EXISTS: { id: 'error.INVITATION_PENDING_EXISTS', defaultMessage: 'Ya hay una invitación pendiente para ese email.' },
   ROLE_NOT_FOUND: { id: 'error.ROLE_NOT_FOUND', defaultMessage: 'El rol seleccionado no existe en esta organización.' },
 
-  MAINTENANCE_WORK_ORDER_NOT_ASSIGNED: { id: 'error.MAINTENANCE_WORK_ORDER_NOT_ASSIGNED', defaultMessage: 'No tenés acceso a esa orden de trabajo.' },
   WORK_ORDER_ALREADY_CLOSED: { id: 'error.WORK_ORDER_ALREADY_CLOSED', defaultMessage: 'La orden de trabajo ya está cerrada.' },
+  SETTLEMENT_ALREADY_EXISTS: { id: 'error.SETTLEMENT_ALREADY_EXISTS', defaultMessage: 'Ya existe una liquidación para este propietario y período.' },
 
   DELETION_ALREADY_REQUESTED: { id: 'error.DELETION_ALREADY_REQUESTED', defaultMessage: 'Ya hay una solicitud de eliminación pendiente.' },
 
@@ -126,7 +121,7 @@ import { useErrorMessage } from '@/api/useErrorMessage'
 
 import {
   PageLevelError, InlineError, RetryableError,
-  AccountLockedState, RateLimitState, FeatureNotActivatedState,
+  AccountLockedState, RateLimitState,
 } from './error-states'
 
 type Props = {
@@ -142,17 +137,15 @@ export function ErrorStateByCode({ error, onRetry }: Props) {
   // 1. Page-level errors
   if (error.code === 'NOT_FOUND') return <PageLevelError variant="not-found" />
   if (error.code === 'FORBIDDEN' || error.code === 'ROLE_REQUIRED') return <PageLevelError variant="forbidden" />
-  if (error.code === 'FEATURE_NOT_ACTIVATED') return <FeatureNotActivatedState />
   if (error.code === 'ACCOUNT_LOCKED') return <AccountLockedState />
   if (error.code === 'INVITATION_EXPIRED') return <PageLevelError variant="invitation-expired" />
 
   // 2. Inline errors
-  if (error.code === 'PERIOD_LOCKED') return <InlineError code={error.code} details={error.details} />
+  if (error.code === 'CONTRACT_OVERLAP') return <InlineError code={error.code} details={error.details} />
   if (error.code === 'LAST_OWNER_REQUIRED') return <InlineError code={error.code} />
   if (error.code === 'PAYMENT_EXCEEDS_CONTRACT_BALANCE') return <InlineError code={error.code} details={error.details} />
 
   // 3. Retryable / transient
-  if (error.code === 'INDEX_SERVICE_UNAVAILABLE') return <RetryableError onRetry={onRetry} message={useErrorMessage(error)} />
   if (error.code === 'RATE_LIMIT_EXCEEDED') return <RateLimitState retryAfter={error.details?.retry_after_seconds as number} />
 
   // 4. Fallback
@@ -182,8 +175,8 @@ export function PaymentForm() {
         form.setError('amount', { type: 'server', message: 'El monto excede el saldo pendiente del contrato.' })
         return
       }
-      if (error.code === 'PERIOD_LOCKED') {
-        form.setError('payment_date', { type: 'server', message: 'Este período está bloqueado.' })
+      if (error.code === 'EXCHANGE_RATE_REQUIRED') {
+        form.setError('exchange_rate', { type: 'server', message: 'Se requiere el tipo de cambio para esta moneda.' })
         return
       }
       toast.error(useErrorMessage(error))
@@ -213,18 +206,6 @@ export const securityMessages = defineMessages({
   'auth.forgot_password_confirm': {
     id: 'auth.forgot_password_confirm',
     defaultMessage: 'Si el email está registrado, recibirás instrucciones para restablecer tu contraseña en los próximos minutos.',
-  },
-
-  // sdd_04 §2.2b
-  'mfa.recovery_codes.warning': {
-    id: 'mfa.recovery_codes.warning',
-    defaultMessage: 'Guardalos en un lugar seguro. Se muestran una única vez y no pueden recuperarse.',
-  },
-
-  // JWT con mfa_via=recovery_code
-  'mfa.signed_in_via_recovery.banner': {
-    id: 'mfa.signed_in_via_recovery.banner',
-    defaultMessage: 'Iniciaste sesión con un código de recuperación. Considerá regenerar tus códigos.',
   },
 })
 ```
@@ -320,7 +301,7 @@ export function useCreate<Module>() {
       if (error.code === 'VALIDATION_ERROR' && error.field) {
         return   // el componente lo recibe via formState
       }
-      if (['PERIOD_LOCKED', 'PAYMENT_EXCEEDS_CONTRACT_BALANCE'].includes(error.code)) {
+      if (['CONTRACT_OVERLAP', 'PAYMENT_EXCEEDS_CONTRACT_BALANCE'].includes(error.code)) {
         return   // el componente lo discrimina con error.code
       }
       toast.error(useErrorMessage(error))
@@ -346,7 +327,7 @@ export function <Module>Page() {
 ## Checklist pre-commit
 
 - [ ] Todo error.code consumido está mapeado en `errorMessages` con un descriptor de react-intl.
-- [ ] Los mensajes de seguridad (anti-enumeration, MFA) usan el **texto exacto del SDD**.
+- [ ] Los mensajes de seguridad (anti-enumeration, lockout) usan el **texto exacto del SDD**.
 - [ ] El componente `<ErrorStateByCode>` discrimina por `error.code` antes de mostrar un mensaje genérico.
 - [ ] Los errores con `field` se mapean a inline errors del form (`form.setError(error.field, ...)`).
 - [ ] El interceptor de Axios maneja `Retry-After` globalmente para 429.

@@ -69,7 +69,7 @@ Todo hallazgo del review se reduce a una de tres categorías:
 - [ ] Status code de respuesta exitosa coincide con el SDD.
 - [ ] El **request body** acepta exactamente los campos del SDD, ni más ni menos.
 - [ ] **Formato de error CUSTOM** (no RFC 7807): `{ "error": { "code", "message", "field", "details" } }`.
-- [ ] Cada FA del SDD tiene un `error.code` específico (`PAYMENT_EXCEEDS_CONTRACT_BALANCE`, `PERIOD_LOCKED`, etc.), no un `INTERNAL_ERROR` genérico.
+- [ ] Cada FA del SDD tiene un `error.code` específico (`PAYMENT_EXCEEDS_CONTRACT_BALANCE`, `CONTRACT_OVERLAP`, etc.), no un `INTERNAL_ERROR` genérico.
 - [ ] `organization_id` se extrae del JWT, **nunca** del body/path/query (salvo en `/superadmin/*` donde es opcional).
 - [ ] El endpoint declara el permiso requerido.
 - [ ] El access cross-tenant retorna **404** (NOT_FOUND), no 403.

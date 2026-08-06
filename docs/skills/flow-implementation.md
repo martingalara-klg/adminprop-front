@@ -77,9 +77,9 @@ export function ContractsListPage() {
 
 ### Estados específicos de flujos definidos en SDD
 
-#### Login con MFA (sdd_03 §1)
+#### Login (sdd_03 §1)
 
-`POST /auth/login` puede retornar 3 escenarios. El frontend los discrimina por `status` en el body:
+`POST /auth/login` tiene un único resultado exitoso (`status: "authenticated"`) — MFA es post-MVP (`sdd_04` §2.2b), sin flujos de challenge o enrollment en el MVP. El frontend discrimina éxito vs error:
 
 ```typescript
 // src/modules/auth/hooks/useLoginFlow.ts
@@ -91,8 +91,6 @@ import { authApi } from '@/api/auth.api'
 type LoginFlowState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'mfa_challenge_required'; mfa_token: string; expires_in: number }
-  | { kind: 'mfa_enrollment_required'; mfa_token: string; expires_in: number }
   | { kind: 'authenticated' }
   | { kind: 'error'; code: string; message: string }
 
@@ -103,21 +101,13 @@ export function useLoginFlow() {
   const mutation = useMutation({
     mutationFn: authApi.login,
     onMutate: () => setState({ kind: 'loading' }),
-    onSuccess: (response) => {
-      const data = response.data
-      if (data.status === 'authenticated') {
-        setState({ kind: 'authenticated' })
-        navigate('/')
-      } else if (data.status === 'mfa_challenge_required') {
-        setState({ kind: 'mfa_challenge_required', mfa_token: data.mfa_token, expires_in: data.mfa_token_expires_in })
-        navigate('/login/mfa-challenge')
-      } else if (data.status === 'mfa_enrollment_required') {
-        setState({ kind: 'mfa_enrollment_required', mfa_token: data.mfa_token, expires_in: data.mfa_token_expires_in })
-        navigate('/login/mfa-enroll')
-      }
+    onSuccess: () => {
+      setState({ kind: 'authenticated' })
+      navigate('/')
     },
     onError: (error: AdminPropApiError) => {
       // SDD: sdd_04 §2.2 — anti-enumeration: mismo mensaje para "no existe" y "password incorrecta"
+      // error.code === 'ACCOUNT_LOCKED' tras 5 intentos fallidos en 10 min (sdd_04 §2.5)
       setState({ kind: 'error', code: error.code, message: error.message })
     },
   })
@@ -318,7 +308,7 @@ export function RequirePermission({ permission, children, fallback = null }: Pro
 </RequirePermission>
 ```
 
-> Esto es UX (evitar dead-ends). El backend igual enforza con `403 FORBIDDEN` o `403 MAINTENANCE_WORK_ORDER_NOT_ASSIGNED`.
+> Esto es UX (evitar dead-ends). El backend igual enforza con `403 FORBIDDEN` o `404 NOT_FOUND` (cross-tenant/cross-scope, RN-D01).
 
 ## Template
 
@@ -389,7 +379,7 @@ catch (error) { toast.error('Algo salió mal') }
 
 // ✅ Discriminar por error.code
 catch (error) {
-  if (error.code === 'PERIOD_LOCKED') setUiState({ kind: 'period_locked', period: error.details })
+  if (error.code === 'CONTRACT_OVERLAP') setUiState({ kind: 'contract_overlap', details: error.details })
   else if (error.code === 'PAYMENT_EXCEEDS_CONTRACT_BALANCE') setUiState({ kind: 'balance_exceeded' })
   else setUiState({ kind: 'generic_error', message: error.message })
 }
