@@ -2,7 +2,7 @@
 
 Usar al inicio de cada sesión de implementación en `adminprop-front`.
 Claude Code lee este archivo y opera autónomamente hasta tener un PR
-listo en `In progress` (el Project solo tiene Todo / In progress / Done).
+listo en `In Progress` (el Project solo tiene Todo / In Progress / Done).
 
 ### Reglas de merge del proyecto
 
@@ -18,7 +18,7 @@ listo en `In progress` (el Project solo tiene Todo / In progress / Done).
 ```bash
 REPO="adminprop-front"
 ORG="martingalara-klg"
-PROJECT_NUMBER=2   # ⚠ confirmar en bootstrap (paso 7 del diseño)
+PROJECT_NUMBER=2   # AdminProp Frontend — confirmado en el bootstrap (2026-08-06) (paso 7 del diseño)
 
 # Cachear IDs del Project una sola vez por sesión (gh project item-edit
 # los requiere; calcularlos cada vez es ruido):
@@ -29,9 +29,9 @@ status_option() {
   gh project field-list "$PROJECT_NUMBER" --owner "$ORG" --format json \
     | jq -r ".fields[] | select(.name == \"Status\") | .options[] | select(.name == \"$1\") | .id"
 }
-# El Project tiene tres estados: "Todo" / "In progress" / "Done"
+# El Project tiene tres estados: "Todo" / "In Progress" / "Done"
 # (no existe "In Review" ni "Blocked" en el Project de este repo)
-STATUS_IN_PROGRESS_ID=$(status_option "In progress")
+STATUS_IN_PROGRESS_ID=$(status_option "In Progress")
 ```
 
 Nota: este proyecto es una **única app Vite** (sin monorepo de builds
@@ -178,7 +178,7 @@ git checkout develop
 git pull origin develop   # incorpora los merges que el usuario haya hecho
 git checkout -b "feature/${ISSUE_NUMBER}-${SLUG}"
 
-# Mover a "In progress" en el Project
+# Mover a "In Progress" en el Project
 gh project item-edit \
   --project-id "$PROJECT_ID" \
   --id "$ITEM_ID" \
@@ -189,7 +189,7 @@ gh project item-edit \
 # (no existen status:in-progress, status:in-review — no intentar agregarlos)
 
 echo "✓ Branch: feature/${ISSUE_NUMBER}-${SLUG}"
-echo "✓ Issue #$ISSUE_NUMBER → In progress"
+echo "✓ Issue #$ISSUE_NUMBER → In Progress"
 ```
 
 ---
@@ -458,7 +458,7 @@ asociación bidireccional vive en GitHub así:
 ```bash
 # ─── Paso 1: PR al Project (idempotente; a veces GitHub lo agrega solo)
 gh project item-add "$PROJECT_NUMBER" --owner "$ORG" --url "$PR_URL"
-# El Project se mantiene en "In progress" — el usuario lo mueve a "Done"
+# El Project se mantiene en "In Progress" — el usuario lo mueve a "Done"
 # al mergear. No existe el estado "In Review" en este repo.
 
 # ─── Paso 2: actualizar el body del issue
@@ -506,7 +506,7 @@ echo "✓ Milestone: $MILESTONE"
 Issue:    #<N> — <título>
 Branch:   feature/<N>-<slug>
 PR:       <PR_URL> (base: develop)
-Estado:   In progress — el usuario mergea y cierra la tarea
+Estado:   In Progress — el usuario mergea y cierra la tarea
 
 CRITERIOS DE ACEPTACIÓN
 CA-XX-01 ✓  CA-XX-02 ✓  ...
@@ -547,7 +547,7 @@ continuar con la siguiente tarea del roadmap.
 - **Crear el branch desde otro feature branch.** Siempre desde `develop` con `git pull origin develop`.
 - **Omitir el bloque de actualización del body del issue** (Fase 4.4 paso 2). Marcar los TODOs en el issue es parte del contrato de "PR listo".
 - **Omitir el comentario cross-referenciado** en el PR (Fase 4.4 paso 3). El `Closes #N` es necesario pero no suficiente — el comentario hace la asociación visible para el reviewer.
-- **Intentar mover el item del Project a "In Review" o "Blocked" como columna.** Esos estados no existen; el Project sólo tiene `Todo`/`In progress`/`Done`. Dejar en `In progress` — el usuario lo cierra al mergear.
+- **Intentar mover el item del Project a "In Review" o "Blocked" como columna.** Esos estados no existen; el Project sólo tiene `Todo`/`In Progress`/`Done`. Dejar en `In Progress` — el usuario lo cierra al mergear.
 - **Agregar labels `status:in-progress`, `status:in-review` o `status:done`.** No existen en este repo. Sólo `status:ready`, `status:blocked` y `sdd:divergence`.
 - Cerrar el issue antes del merge del PR.
 - Inventar un endpoint que no existe en `sdd_03`.
