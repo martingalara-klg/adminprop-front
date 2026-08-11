@@ -18,7 +18,7 @@ listo en `In Progress` (el Project solo tiene Todo / In Progress / Done).
 ```bash
 REPO="adminprop-front"
 ORG="martingalara-klg"
-PROJECT_NUMBER=2   # AdminProp Frontend — confirmado en el bootstrap (2026-08-06) (paso 7 del diseño)
+PROJECT_NUMBER=2   # AdminProp Frontend — confirmado en el bootstrap (2026-08-06)
 
 # Cachear IDs del Project una sola vez por sesión (gh project item-edit
 # los requiere; calcularlos cada vez es ruido):
