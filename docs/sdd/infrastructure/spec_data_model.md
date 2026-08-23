@@ -2,12 +2,12 @@
 name: AdminProp — Especificación del Modelo de Datos
 description: Tablas físicas PostgreSQL (22 tablas en 8 capas), RLS, índices, orden de migración, seed data y convenciones de nomenclatura
 type: project
-version: 1.0
-fecha: 2026-08-05
+version: 1.1
+fecha: 2026-08-11
 ---
 # AdminProp — Especificación del Modelo de Datos
 
-**Versión:** 1.0
+**Versión:** 1.1
 **Estado:** Borrador para revisión
 **Fecha:** 2026-08-05
 
@@ -231,6 +231,7 @@ Sin RLS (es la raíz); el acceso se controla por membresía. Solo `adminprop_sup
 | notes | TEXT | | |
 | metadata | JSONB | DEFAULT `'{}'` | |
 | created_at / updated_at / deleted_at | TIMESTAMPTZ | | |
+| expiring_notified_at | TIMESTAMPTZ | NULL | Marca de idempotencia del aviso de vencimiento (RF-05/CA-03-07, issue #19) |
 | | | CHECK: currency='USD' ⇒ adjustment_frequency_months IS NULL AND adjustment_index IS NULL | RN-C02 |
 
 **Invariante RN-C01 (no solapamiento):** constraint de exclusión —
@@ -358,7 +359,7 @@ ALTER TABLE contracts ADD CONSTRAINT contracts_no_overlap
 |---|---|---|---|
 | id | UUID | PK | |
 | organization_id | UUID | NOT NULL, FK | RLS |
-| entity_type | TEXT | NOT NULL CHECK IN (`work_order`,`work_order_quote`,`settlement`) | Extensible |
+| entity_type | TEXT | NOT NULL CHECK IN (`work_order`,`work_order_quote`,`settlement`,`payment`,`renter`) | `payment` = recibo de cobro; `renter` = libre deuda |
 | entity_id | UUID | NOT NULL | Sin FK física (polimórfica); integridad app-level |
 | file_path | TEXT | NOT NULL | Filesystem local en MVP |
 | file_name / mime_type | TEXT | NOT NULL | |
