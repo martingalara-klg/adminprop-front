@@ -2,12 +2,12 @@
 name: AdminProp — Modelo de Dominio
 description: Entidades del dominio de gestión de alquileres, invariantes (RN-C, RN-P, RN-L, RN-A, RN-D), relaciones y glosario unificado
 type: project
-version: 1.0
-fecha: 2026-08-05
+version: 1.2
+fecha: 2026-08-20
 ---
 # AdminProp — Modelo de Dominio
 
-**Versión:** 1.0
+**Versión:** 1.2
 **Estado:** Borrador para revisión
 **Fecha:** 2026-08-05
 
@@ -339,7 +339,7 @@ Archivo asociado a una entidad: fotos de pedidos de reparación, cotizaciones y 
 | Atributo | Tipo | Descripción |
 |---|---|---|
 | id | UUID | Identificador único |
-| entity_type / entity_id | texto / UUID | A qué entidad pertenece (work_order, quote, settlement, …) |
+| entity_type / entity_id | texto / UUID | A qué entidad pertenece (work_order, quote, settlement, payment [recibo], renter [libre deuda], …) |
 | file_path | texto | Ubicación en storage (filesystem local en MVP) |
 | file_name / mime_type / size | texto / texto / entero | Metadatos |
 | uploaded_by | UUID | Usuario |
@@ -393,13 +393,13 @@ Aviso in-app + email a un usuario por un evento del sistema.
 |---|---|---|
 | id | UUID | Identificador único |
 | user_id | UUID | Destinatario |
-| event_type | enum | `adjustment_pending` \| `contract_expiring` \| `quote_submitted` \| `work_order_created` \| `work_order_closed` |
+| event_type | enum | `adjustment_pending` \| `contract_expiring` \| `quote_submitted` \| `quote_approved` \| `work_order_created` \| `work_order_closed` |
 | payload | JSON | Datos del evento (contrato, propiedad, pedido, etc.) |
 | read_at | timestamp | Null = no leída |
 | email_sent_at | timestamp | Cuándo salió el email (null si falló/pendiente) |
 
 **Invariantes:**
-- El evento se enruta según el rol: `work_order_created` → maintenance; `quote_submitted`, `work_order_closed`, `adjustment_pending`, `contract_expiring` → owner y admin.
+- El evento se enruta según el rol: `work_order_created`, `quote_approved` → maintenance; `quote_submitted`, `work_order_closed`, `adjustment_pending`, `contract_expiring` → owner y admin.
 
 ---
 
@@ -441,6 +441,7 @@ Registro append-only de las operaciones sensibles.
 - **RN-P05:** Se aceptan pagos parciales; el saldo restante queda como deuda del inquilino.
 - **RN-P06:** Si la moneda del pago difiere de la del contrato, el tipo de cambio se ingresa manualmente y es obligatorio.
 - **RN-P07:** Un cobro con destino "cuenta del propietario" es dinero ya rendido: no suma al neto a rendir, pero sí a la base de cálculo de la comisión.
+- **RN-P08:** El recibo de cobro se genera bajo demanda (opcional) y refleja exactamente lo imputado; el certificado de **libre deuda** solo se emite si el inquilino no registra saldos impagos, y cada emisión queda auditada.
 
 ### RN-L — Liquidaciones
 
