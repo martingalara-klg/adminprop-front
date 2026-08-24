@@ -11,10 +11,14 @@ import { AccountLockedAlert } from '../components/AccountLockedAlert'
 import { useLoginFlow } from '../hooks/useLoginFlow'
 import { securityMessages } from '@/shared/i18n/messages/security.es-AR'
 import { resolveErrorCodeMessage } from '@/shared/i18n/messages/error-codes.es-AR'
+import { useSessionStore } from '@/shared/auth/session-store'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const { state, login, selectOrganization } = useLoginFlow()
+  // issue #21: mensaje es-AR de un logout forzado (ej: MEMBERSHIP_INACTIVE
+  // detectado al rehidratar via GET /auth/me) -- efímero, no persistido.
+  const logoutReason = useSessionStore((s) => s.logoutReason)
 
   useEffect(() => {
     if (state.kind === 'authenticated') {
@@ -25,6 +29,12 @@ export function LoginPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
       <h1 className="text-center text-xl font-semibold">Ingresar a AdminProp</h1>
+
+      {logoutReason ? (
+        <p className="text-center text-sm text-destructive" role="alert">
+          {logoutReason}
+        </p>
+      ) : null}
 
       {state.kind === 'organization_selection' ? (
         <OrganizationSelect
