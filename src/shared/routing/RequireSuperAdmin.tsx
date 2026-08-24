@@ -1,16 +1,31 @@
 import { Navigate, Outlet } from 'react-router-dom'
+import { useSession } from '@/shared/auth/useSession'
+import { useSessionStore } from '@/shared/auth/session-store'
+import { Spinner } from '@/shared/components/Spinner'
 
 /**
- * Guarda de ruta para `/superadmin/*`. La implementación real de sesión
- * (lectura de `is_super_admin` desde el JWT) llega con el cliente HTTP
- * (#4); por ahora bloquea todo el namespace de forma segura por defecto.
+ * Guarda de ruta para `/superadmin/*`. issue #6: reemplaza el stub
+ * hardcodeado (`isSuperAdmin = false`) por la sesión real de #21
+ * (`session.isSuperAdmin` viene de `permissions`/`is_super_admin` reales
+ * del JWT, nunca de `role_name` -- CLAUDE.md §4).
  *
- * TODO(#4): reemplazar por `useSession()` real.
+ * Mientras el bootstrap de sesión (#21, GET /auth/me) está en curso, no
+ * decide todavía -- evita un redirect prematuro a "/" para un Super Admin
+ * cuya cookie es válida pero cuyo /auth/me aún no resolvió.
  */
 export function RequireSuperAdmin() {
-  const isSuperAdmin = false
+  const isBootstrapping = useSessionStore((s) => s.isBootstrapping)
+  const session = useSession()
 
-  if (!isSuperAdmin) {
+  if (isBootstrapping) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner label="Cargando sesión..." />
+      </div>
+    )
+  }
+
+  if (!session?.isSuperAdmin) {
     return <Navigate to="/" replace />
   }
 

@@ -24,7 +24,13 @@ import { buildSession, useSessionStore } from './session-store'
 
 export function useSessionBootstrap(): void {
   useEffect(() => {
-    if (useSessionStore.getState().session) return
+    // issue #6: si ya hay sesión en memoria, el bootstrap está "resuelto"
+    // de inmediato -- el shell no debe quedarse mostrando el spinner de
+    // carga esperando un fetch que nunca se dispara.
+    if (useSessionStore.getState().session) {
+      useSessionStore.getState().finishBootstrap()
+      return
+    }
 
     const controller = new AbortController()
 
@@ -58,6 +64,12 @@ export function useSessionBootstrap(): void {
 
         // 401 u otro error inesperado -- estado deslogueado, sin mensaje.
         useSessionStore.getState().clearSession()
+      })
+      .finally(() => {
+        // issue #6: si el efecto se desmontó (abort), un futuro montaje
+        // vuelve a correr este mismo bootstrap -- no marcar "resuelto" acá.
+        if (controller.signal.aborted) return
+        useSessionStore.getState().finishBootstrap()
       })
 
     return () => controller.abort()
