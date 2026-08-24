@@ -1,6 +1,7 @@
 import type { RouteObject } from 'react-router-dom'
 
 import { AppLayout } from '@/shared/routing/AppLayout'
+import { HomeRedirect } from '@/shared/routing/HomeRedirect'
 import { superadminRoutes } from '@/superadmin/routes'
 
 import { authRoutes } from '@/modules/auth/routes'
@@ -20,20 +21,18 @@ import { accountRoutes } from '@/modules/account/routes'
  *
  * `authRoutes` (login/logout/forgot-password/reset-password/accept-
  * invitation, #5) vive FUERA de `AppLayout`: son rutas públicas, sin el
- * shell autenticado. El guard de sesión real (redirect a /login cuando no
- * hay sesión) llega con el shell (#6).
+ * shell autenticado. `AppLayout` (#6) resuelve el guard de sesión real
+ * (redirect a /login sin sesión) y `HomeRedirect` (#6) decide "/" según
+ * el primer módulo al que el usuario tiene permiso.
  */
 export const appRoutes: RouteObject[] = [
   {
     path: '/',
     element: <AppLayout />,
     children: [
-      // Placeholder de Fase 0: renderiza directamente el primer módulo del
-      // roadmap en "/" (evita <Navigate> del data router — su navigate()
-      // depende de fetch/AbortSignal, incompatible con jsdom en Vitest).
-      // La redirección real de "/" según sesión/rol llega con el shell (#6);
-      // #5 sólo agrega las rutas públicas de auth (ver authRoutes abajo).
-      { index: true, element: propertiesRoutes[0]?.element },
+      // issue #6: redirige "/" al primer módulo de negocio visible para la
+      // sesión activa (permissions[] real, ver src/shared/routing/HomeRedirect.tsx).
+      { index: true, element: <HomeRedirect /> },
       ...propertiesRoutes,
       ...peopleRoutes,
       ...contractsRoutes,
