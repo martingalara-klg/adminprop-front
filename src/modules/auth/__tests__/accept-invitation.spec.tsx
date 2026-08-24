@@ -81,6 +81,8 @@ describe('UC-01 — Activación de cuenta vía invitación', () => {
         status: 'authenticated',
         user: { id: 'user-9', email: 'nuevo-owner@a.com', full_name: 'Nuevo Owner' },
         organization: { id: 'org-9', name: 'Inmobiliaria Nueva', role: 'owner' },
+        permissions: ['user:manage', 'organization:configure'],
+        is_super_admin: false,
       },
     })
 
@@ -98,7 +100,7 @@ describe('UC-01 — Activación de cuenta vía invitación', () => {
     })
 
     const session = useSessionStore.getState().session
-    expect(session?.organization.id).toBe('org-9')
+    expect(session?.organization?.id).toBe('org-9')
     expect(session?.permissions).toContain('user:manage') // owner
   })
 })

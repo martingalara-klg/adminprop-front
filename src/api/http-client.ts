@@ -11,13 +11,37 @@
 // concurrentes coalescen en un solo POST /auth/refresh.
 import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import { v4 as uuidv4 } from 'uuid'
-import { AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH, AUTH_REFRESH_PATH, authApi } from './auth.api'
+// `authApi` se usa SOLO de forma diferida (dentro del interceptor
+// asincrónico de 401, nunca en la evaluación sincrónica de este módulo) --
+// `auth.api.ts` importa `httpClient`/estas rutas de vuelta desde acá, y
+// leer un binding de un módulo circular en su evaluación top-level (en vez
+// de diferido) revienta con "Cannot access 'X' before initialization" en
+// el bundle de produccion (issue #21: App.tsx ahora importa el barrel de
+// auth de forma eager via useSessionBootstrap, lo que cambia el orden de
+// evaluación del ciclo http-client.ts <-> auth.api.ts). Por eso las
+// constantes de ruta viven ACA (import.ts -> auth.api.ts, una sola
+// dirección) y no al revés.
+import { authApi } from './auth.api'
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/v1'
 
+export const AUTH_REFRESH_PATH = '/auth/refresh'
+export const AUTH_LOGIN_PATH = '/auth/login'
+export const AUTH_LOGOUT_PATH = '/auth/logout'
+// sdd_03 §1 v1.6 (issue #21): su 401 es la señal normal de "sin sesión" al
+// rehidratar (useSessionBootstrap ya lo maneja con un clearSession() sin
+// redirect) -- no una sesión que expiró a mitad de uso, que es el caso que
+// el refresh-then-redirect sí debe cubrir.
+export const AUTH_ME_PATH = '/auth/me'
+
 // Endpoints sobre los que el interceptor de 401 NUNCA dispara un refresh
 // (evita el loop clásico refresh-sobre-refresh / refresh-sobre-login).
-const AUTH_ENDPOINTS_EXCLUDED_FROM_REFRESH = [AUTH_REFRESH_PATH, AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH]
+const AUTH_ENDPOINTS_EXCLUDED_FROM_REFRESH = [
+  AUTH_REFRESH_PATH,
+  AUTH_LOGIN_PATH,
+  AUTH_LOGOUT_PATH,
+  AUTH_ME_PATH,
+]
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & { _retried?: boolean }
 

@@ -7,7 +7,12 @@ import { queryClient } from '@/shared/queryClient'
 import { authApi } from '@/api/auth.api'
 import { useSessionStore } from './session-store'
 
-export async function logout(): Promise<void> {
+/**
+ * @param reason mensaje es-AR opcional a mostrar tras el logout (ej: el
+ *   `MEMBERSHIP_INACTIVE` detectado al rehidratar via `GET /auth/me`,
+ *   issue #21). Sin reason en el logout manual (botón "Cerrar sesión").
+ */
+export async function logout(reason?: string): Promise<void> {
   try {
     await authApi.logout()
   } catch {
@@ -16,5 +21,5 @@ export async function logout(): Promise<void> {
   }
 
   queryClient.clear()
-  useSessionStore.getState().clearSession()
+  useSessionStore.getState().clearSession(reason)
 }

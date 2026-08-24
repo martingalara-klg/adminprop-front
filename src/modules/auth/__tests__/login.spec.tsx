@@ -84,6 +84,9 @@ describe('UC-LOGIN — Login (sdd_03 §1)', () => {
             { id: 'org-1', name: 'Inmobiliaria Uno', role: 'owner' },
             { id: 'org-2', name: 'Inmobiliaria Dos', role: 'admin' },
           ],
+          // sdd_03 §1 v1.6: sin organization_id todavía no se emite JWT.
+          permissions: null,
+          is_super_admin: null,
         },
       })
       .mockResolvedValueOnce({
@@ -91,6 +94,8 @@ describe('UC-LOGIN — Login (sdd_03 §1)', () => {
           status: 'authenticated',
           user: { id: 'user-1', email: 'a@a.com', full_name: 'Ana Admin' },
           organizations: [{ id: 'org-2', name: 'Inmobiliaria Dos', role: 'admin' }],
+          permissions: ['contract:read', 'contract:manage'],
+          is_super_admin: false,
         },
       })
 
@@ -114,7 +119,7 @@ describe('UC-LOGIN — Login (sdd_03 §1)', () => {
     })
 
     await waitFor(() => {
-      expect(useSessionStore.getState().session?.organization.id).toBe('org-2')
+      expect(useSessionStore.getState().session?.organization?.id).toBe('org-2')
       expect(useSessionStore.getState().session?.permissions).toContain('contract:manage')
     })
   })
@@ -125,6 +130,8 @@ describe('UC-LOGIN — Login (sdd_03 §1)', () => {
         status: 'authenticated',
         user: { id: 'user-1', email: 'owner@a.com', full_name: 'Owner Uno' },
         organizations: [{ id: 'org-1', name: 'Inmobiliaria Uno', role: 'owner' }],
+        permissions: ['contract:read', 'contract:manage', 'user:manage'],
+        is_super_admin: false,
       },
     })
 

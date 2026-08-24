@@ -15,7 +15,8 @@ import { AdminPropApiError, mapError } from '@/api/errors'
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
 import type { components } from '@/api/generated/types'
 
-type OrganizationSummary = components['schemas']['adminprop__modules__auth__schemas__OrganizationSummary']
+type OrganizationSummary =
+  components['schemas']['adminprop__modules__auth__schemas__OrganizationSummary']
 
 export type LoginFlowState =
   | { kind: 'idle' }
@@ -37,9 +38,12 @@ export function useLoginFlow() {
       authApi.login(payload),
     onMutate: () => setState({ kind: 'loading' }),
     onSuccess: (response, variables) => {
-      const { status, user, organizations } = response.data
+      const { status, user, organizations, permissions, is_super_admin } = response.data
 
       if (status === 'organization_selection_required') {
+        // sdd_03 §1 v1.6: sin `organization_id` en el body todavía no se
+        // emite JWT -- `permissions`/`is_super_admin` vienen `null`, el
+        // cliente reintenta el login con la organización elegida.
         setPendingCredentials({ email: variables.email, password: variables.password })
         setState({ kind: 'organization_selection', organizations })
         return
@@ -47,7 +51,7 @@ export function useLoginFlow() {
 
       const activeOrganization = organizations[0]
 
-      if (!user || !activeOrganization) {
+      if (!user || !activeOrganization || !permissions || is_super_admin == null) {
         // sdd_03 no documenta este caso -- lo tratamos como error generico
         // en vez de asumir un shape no especificado.
         setState({
@@ -64,6 +68,8 @@ export function useLoginFlow() {
           email: user.email,
           fullName: user.full_name,
           organization: activeOrganization,
+          permissions,
+          isSuperAdmin: is_super_admin,
         }),
       )
       setState({ kind: 'authenticated' })

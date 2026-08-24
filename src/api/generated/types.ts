@@ -203,6 +203,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Me
+         * @description SDD: sdd_03 §1 v1.6 "GET /auth/me -> 200 { data: { user,
+         *     organization, role, permissions[], is_super_admin } } | 401" (issue
+         *     #84 -- el front no puede leer el JWT porque vive en cookie HttpOnly,
+         *     decision #20).
+         *
+         *     Autenticado por cookie igual que el resto de `/auth/*` protegidos: sin
+         *     cookie/JWT invalido -> 401 UNAUTHORIZED (via
+         *     `get_current_access_token_payload`). Membresia desactivada despues de
+         *     emitido el JWT -> 403 MEMBERSHIP_INACTIVE (via `AuthService.get_current_session`).
+         */
+        get: operations["get_me_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/superadmin/organizations": {
         parameters: {
             query?: never;
@@ -1790,6 +1818,13 @@ export interface components {
          * @description CA-00-03: "el owner queda logueado con rol owner" -- mismo shape
          *     conceptual que `LoginResponseData`, pero con una sola organizacion
          *     (la recien activada) en vez de la lista de todas las del usuario.
+         *
+         *     sdd_03 §1 v1.6 (issue #84): `permissions`/`is_super_admin` son los
+         *     mismos valores que porta el JWT emitido en este mismo request --
+         *     a diferencia de `login`, este flujo siempre emite JWT (nunca hay
+         *     seleccion de organizacion pendiente), por lo que no son opcionales.
+         *     `is_super_admin` siempre `false` (accept-invitation nunca activa
+         *     cuentas de Super Admin).
          */
         AcceptInvitationResponseData: {
             /**
@@ -1799,6 +1834,13 @@ export interface components {
             status: string;
             user: components["schemas"]["adminprop__modules__auth__schemas__UserSummary"];
             organization: components["schemas"]["AcceptInvitationOrganization"];
+            /** Permissions */
+            permissions: string[];
+            /**
+             * Is Super Admin
+             * @default false
+             */
+            is_super_admin: boolean;
         };
         /**
          * AdjustmentApplyRequest
@@ -2593,14 +2635,19 @@ export interface components {
         };
         /**
          * LoginResponseData
-         * @description sdd_03 §1: `200 { data: { status, user, organizations[] } }`.
+         * @description sdd_03 §1 v1.6: `200 { data: { status, user, organizations[],
+         *     permissions[], is_super_admin } }`.
          *
-         *     `status` == "authenticated": cookies de sesion seteadas, `user` presente.
+         *     `status` == "authenticated": cookies de sesion seteadas, `user`
+         *     presente, `permissions`/`is_super_admin` son los mismos valores que
+         *     porta el JWT emitido (issue #84 -- el front no puede leer el JWT
+         *     porque vive en cookie HttpOnly, decision #20).
          *     `status` == "organization_selection_required": decision de
          *     implementacion (no explicita en sdd_03) para el caso "usuario
          *     multi-org sin `organization_id` en el body" -- no se emite JWT/cookies,
-         *     el cliente reintenta el login con `organization_id` elegido de
-         *     `organizations[]`.
+         *     `permissions`/`is_super_admin` van `None` (todavia no hay organizacion
+         *     resuelta), el cliente reintenta el login con `organization_id` elegido
+         *     de `organizations[]`.
          */
         LoginResponseData: {
             /** Status */
@@ -2608,6 +2655,48 @@ export interface components {
             user: components["schemas"]["adminprop__modules__auth__schemas__UserSummary"] | null;
             /** Organizations */
             organizations: components["schemas"]["adminprop__modules__auth__schemas__OrganizationSummary"][];
+            /** Permissions */
+            permissions?: string[] | null;
+            /** Is Super Admin */
+            is_super_admin?: boolean | null;
+        };
+        /**
+         * MeOrganization
+         * @description Organizacion activa del JWT -- `None` para sesiones de Super Admin
+         *     (el JWT de `/superadmin/*` no lleva `org`, sdd_03 §Convenciones).
+         */
+        MeOrganization: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** MeResponse */
+        MeResponse: {
+            data: components["schemas"]["MeResponseData"];
+        };
+        /**
+         * MeResponseData
+         * @description sdd_03 §1 v1.6: `GET /auth/me -> 200 { data: { user, organization,
+         *     role, permissions[], is_super_admin } }`.
+         *
+         *     `organization`/`role` son `None` solo para Super Admin. `permissions`
+         *     se resuelve en vivo contra la membresia actual (no el contenido
+         *     cacheado del JWT) -- si el rol perdio/gano permisos despues de emitido
+         *     el JWT, esta respuesta ya refleja el estado vigente.
+         */
+        MeResponseData: {
+            user: components["schemas"]["adminprop__modules__auth__schemas__UserSummary"];
+            organization: components["schemas"]["MeOrganization"] | null;
+            /** Role */
+            role: string | null;
+            /** Permissions */
+            permissions: string[];
+            /** Is Super Admin */
+            is_super_admin: boolean;
         };
         /**
          * Notification
@@ -4399,6 +4488,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_me_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
                 };
             };
         };
