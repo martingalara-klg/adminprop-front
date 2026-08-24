@@ -1,45 +1,18 @@
 // src/shared/auth/__tests__/session.spec.ts
 //
-// sdd_03 §"Catalogo de Permisos" + §"Resumen de Autorizacion por Recurso":
-// el mapa rol -> permissions[] debe reflejar exactamente el catalogo
-// cerrado. usePermission/RequirePermission chequean SOLO permissions[],
-// nunca role_name (CLAUDE.md §4).
+// issue #21: el store de sesión se alimenta de `permissions[]`/
+// `is_super_admin` REALES que trae el backend (sdd_03 §1 v1.6) -- ya no de
+// un mapa client-side (`role-permissions.ts`, eliminado por este issue).
+// `usePermission`/`usePermissions` siguen chequeando SOLO `permissions[]`,
+// nunca `role_name` (CLAUDE.md §4).
 import { beforeEach, describe, expect, it } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { permissionsForRole } from '../role-permissions'
 import { buildSession, useSessionStore } from '../session-store'
 import { usePermission, usePermissions } from '../usePermission'
 
-describe('role-permissions', () => {
-  it('owner tiene los permisos exclusivos de organizacion (user:manage, landlord:set-commission)', () => {
-    const permissions = permissionsForRole('owner')
-    expect(permissions).toContain('user:manage')
-    expect(permissions).toContain('organization:configure')
-    expect(permissions).toContain('landlord:set-commission')
-  })
-
-  it('admin no tiene user:manage ni organization:configure (sdd_03 tabla de autorizacion)', () => {
-    const permissions = permissionsForRole('admin')
-    expect(permissions).not.toContain('user:manage')
-    expect(permissions).not.toContain('organization:configure')
-    expect(permissions).not.toContain('landlord:set-commission')
-    expect(permissions).toContain('contract:manage')
-  })
-
-  it('maintenance solo ve ordenes de trabajo y adjuntos -- nunca contratos, cobranzas ni liquidaciones', () => {
-    const permissions = permissionsForRole('maintenance')
-    expect(permissions).toEqual(
-      expect.arrayContaining(['work-order:read', 'work-order:quote', 'work-order:close']),
-    )
-    expect(permissions).not.toContain('contract:read')
-    expect(permissions).not.toContain('payment:create')
-    expect(permissions).not.toContain('settlement:read')
-  })
-})
-
 describe('usePermission / usePermissions', () => {
   beforeEach(() => {
-    useSessionStore.setState({ session: null })
+    useSessionStore.setState({ session: null, logoutReason: null })
   })
 
   it('devuelve false sin sesión', () => {
@@ -54,6 +27,8 @@ describe('usePermission / usePermissions', () => {
         email: 'm@a.com',
         fullName: 'Mario Mantenimiento',
         organization: { id: 'org-1', name: 'Org 1', role: 'maintenance' },
+        permissions: ['work-order:read', 'work-order:quote', 'work-order:close', 'notification:read'],
+        isSuperAdmin: false,
       }),
     )
 
@@ -71,6 +46,8 @@ describe('usePermission / usePermissions', () => {
         email: 'a@a.com',
         fullName: 'Admin Uno',
         organization: { id: 'org-1', name: 'Org 1', role: 'admin' },
+        permissions: ['contract:read', 'contract:manage'],
+        isSuperAdmin: false,
       }),
     )
 
@@ -78,5 +55,35 @@ describe('usePermission / usePermissions', () => {
       usePermissions(['contract:read', 'organization:configure']),
     )
     expect(result.current).toBe(false)
+  })
+})
+
+describe('buildSession (issue #21)', () => {
+  it('usa permissions[]/isSuperAdmin REALES pasados por parámetro, sin derivarlos del role', () => {
+    const session = buildSession({
+      userId: 'u9',
+      email: 'owner@a.com',
+      fullName: 'Owner Nueve',
+      organization: { id: 'org-9', name: 'Org 9', role: 'owner' },
+      permissions: ['user:manage', 'organization:configure'],
+      isSuperAdmin: false,
+    })
+
+    expect(session.permissions).toEqual(['user:manage', 'organization:configure'])
+    expect(session.isSuperAdmin).toBe(false)
+  })
+
+  it('soporta organization null (sesión de Super Admin rehidratada via GET /auth/me)', () => {
+    const session = buildSession({
+      userId: 'sa-1',
+      email: 'sa@adminprop.com',
+      fullName: 'Super Admin',
+      organization: null,
+      permissions: [],
+      isSuperAdmin: true,
+    })
+
+    expect(session.organization).toBeNull()
+    expect(session.isSuperAdmin).toBe(true)
   })
 })
