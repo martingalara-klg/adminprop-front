@@ -45,7 +45,9 @@ export function useLoginFlow() {
         return
       }
 
-      if (!user || organizations.length === 0) {
+      const activeOrganization = organizations[0]
+
+      if (!user || !activeOrganization) {
         // sdd_03 no documenta este caso -- lo tratamos como error generico
         // en vez de asumir un shape no especificado.
         setState({
@@ -61,7 +63,7 @@ export function useLoginFlow() {
           userId: user.id,
           email: user.email,
           fullName: user.full_name,
-          organization: organizations[0],
+          organization: activeOrganization,
         }),
       )
       setState({ kind: 'authenticated' })
