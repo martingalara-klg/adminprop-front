@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query'
+import { AdminPropApiError, mapError } from '@/api/errors'
 
 /**
  * Cliente TanStack Query compartido. staleTime por query se define en cada
@@ -7,7 +8,14 @@ import { QueryClient } from '@tanstack/react-query'
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: (failureCount, error) => {
+        const apiError = error instanceof AdminPropApiError ? error : mapError(error)
+        // No reintentar 4xx (errores de negocio o auth) — solo 5xx/red.
+        if (apiError.status >= 400 && apiError.status < 500) {
+          return false
+        }
+        return failureCount < 1
+      },
       refetchOnWindowFocus: false,
     },
     mutations: {
