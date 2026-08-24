@@ -1,14 +1,15 @@
 // src/api/auth.api.ts
 //
-// Cliente de auth completo — sdd_03 §1 "Autenticación (/auth/*)":
-//   POST /auth/login              → 200 { data: { status, user, organizations[] } }
+// Cliente de auth completo — sdd_03 §1 "Autenticación (/auth/*)" (v1.6):
+//   POST /auth/login              → 200 { data: { status, user, organizations[], permissions[], is_super_admin } }
 //   POST /auth/logout             → 204
 //   POST /auth/refresh            → 200 (rota refresh token; cookie nueva)
 //   GET  /auth/invitation/:token  → 200 { data: { email, organization_name, role_name } }
-//   POST /auth/accept-invitation  → 201 (nombre + password; setea cookies)
+//   POST /auth/accept-invitation  → 201 (nombre + password; setea cookies) { data: { ..., permissions[], is_super_admin } }
 //   POST /auth/forgot-password    → 200 SIEMPRE (anti-enumeration)
 //   GET  /auth/reset-password/:token → 200 | 404 | 410
 //   POST /auth/reset-password     → 200
+//   GET  /auth/me                 → 200 { data: { user, organization, role, permissions[], is_super_admin } } | 401 | 403 MEMBERSHIP_INACTIVE
 import { httpClient } from './http-client'
 import type { components } from './generated/types'
 
@@ -21,6 +22,7 @@ type ForgotPasswordResponse = components['schemas']['ForgotPasswordResponse']
 type ResetPasswordTokenResponse = components['schemas']['ResetPasswordTokenResponse']
 type ResetPasswordRequest = components['schemas']['ResetPasswordRequest']
 type ResetPasswordResponse = components['schemas']['ResetPasswordResponse']
+type MeResponse = components['schemas']['MeResponse']
 
 export const AUTH_REFRESH_PATH = '/auth/refresh'
 export const AUTH_LOGIN_PATH = '/auth/login'
@@ -92,6 +94,17 @@ export const authApi = {
 
   async resetPassword(payload: ResetPasswordRequest): Promise<ResetPasswordResponse> {
     const response = await httpClient.post<ResetPasswordResponse>('/auth/reset-password', payload)
+    return response.data
+  },
+
+  /**
+   * sdd_03 §1 v1.6 (issue #84): rehidrata la sesión al recargar la app.
+   * `permissions[]`/`role` se leen en vivo de la membresía vigente (no del
+   * JWT cacheado) — 401 sin cookie válida, 403 `MEMBERSHIP_INACTIVE` si la
+   * membresía fue desactivada después de emitido el JWT.
+   */
+  async me(opts?: { signal?: AbortSignal }): Promise<MeResponse> {
+    const response = await httpClient.get<MeResponse>('/auth/me', { signal: opts?.signal })
     return response.data
   },
 }
