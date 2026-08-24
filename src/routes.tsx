@@ -17,6 +17,11 @@ import { accountRoutes } from '@/modules/account/routes'
 /**
  * Registro central de rutas. Cada módulo aporta su propio `routes.tsx`
  * con `lazy()` para code splitting (ver docs/skills/module-structure.md).
+ *
+ * `authRoutes` (login/logout/forgot-password/reset-password/accept-
+ * invitation, #5) vive FUERA de `AppLayout`: son rutas públicas, sin el
+ * shell autenticado. El guard de sesión real (redirect a /login cuando no
+ * hay sesión) llega con el shell (#6).
  */
 export const appRoutes: RouteObject[] = [
   {
@@ -26,9 +31,9 @@ export const appRoutes: RouteObject[] = [
       // Placeholder de Fase 0: renderiza directamente el primer módulo del
       // roadmap en "/" (evita <Navigate> del data router — su navigate()
       // depende de fetch/AbortSignal, incompatible con jsdom en Vitest).
-      // La redirección real de "/" según sesión/rol llega con auth (#5).
+      // La redirección real de "/" según sesión/rol llega con el shell (#6);
+      // #5 sólo agrega las rutas públicas de auth (ver authRoutes abajo).
       { index: true, element: propertiesRoutes[0]?.element },
-      ...authRoutes,
       ...propertiesRoutes,
       ...peopleRoutes,
       ...contractsRoutes,
@@ -40,5 +45,6 @@ export const appRoutes: RouteObject[] = [
       ...accountRoutes,
     ],
   },
+  ...authRoutes,
   ...superadminRoutes,
 ]
