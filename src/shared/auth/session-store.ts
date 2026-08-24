@@ -37,8 +37,15 @@ type SessionState = {
   // Mensaje es-AR a mostrar tras un logout forzado (ej: `MEMBERSHIP_INACTIVE`
   // detectado al rehidratar via `/auth/me`). Efímero -- nunca persistido.
   logoutReason: string | null
+  // issue #6: el shell (AppLayout / RequireSuperAdmin) necesita distinguir
+  // "todavía no sabemos si hay sesión" (bootstrap de #21 en curso) de "no
+  // hay sesión" -- si no, un usuario con cookie válida ve un parpadeo a
+  // /login antes de que `GET /auth/me` resuelva. Empieza en `true` y nunca
+  // se persiste (siempre arranca en `true` en cada carga de la app).
+  isBootstrapping: boolean
   setSession: (session: Session) => void
   clearSession: (reason?: string) => void
+  finishBootstrap: () => void
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -46,8 +53,10 @@ export const useSessionStore = create<SessionState>()(
     (set) => ({
       session: null,
       logoutReason: null,
+      isBootstrapping: true,
       setSession: (session) => set({ session, logoutReason: null }),
       clearSession: (reason) => set({ session: null, logoutReason: reason ?? null }),
+      finishBootstrap: () => set({ isBootstrapping: false }),
     }),
     {
       name: 'adminprop:session',

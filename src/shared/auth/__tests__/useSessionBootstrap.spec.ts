@@ -21,7 +21,7 @@ import { useSessionBootstrap } from '../useSessionBootstrap'
 
 describe('UC-BOOTSTRAP — Rehidratación de sesión via GET /auth/me (issue #21)', () => {
   beforeEach(() => {
-    useSessionStore.setState({ session: null, logoutReason: null })
+    useSessionStore.setState({ session: null, logoutReason: null, isBootstrapping: true })
     localStorage.clear()
   })
 
@@ -116,10 +116,64 @@ describe('UC-BOOTSTRAP — Rehidratación de sesión via GET /auth/me (issue #21
         isSuperAdmin: false,
       },
       logoutReason: null,
+      isBootstrapping: true,
     })
 
     renderHook(() => useSessionBootstrap())
 
     expect(authApi.me).not.toHaveBeenCalled()
+  })
+
+  // issue #6: el shell (AppLayout / RequireSuperAdmin) lee `isBootstrapping`
+  // para no redirigir a /login antes de que /auth/me resuelva.
+  it('CA-06-11: isBootstrapping arranca en true y pasa a false apenas hay sesión en memoria (sin fetch)', () => {
+    useSessionStore.setState({
+      session: {
+        userId: 'u1',
+        email: 'a@a.com',
+        fullName: 'Ana',
+        organization: { id: 'org-1', name: 'Org 1', role: 'admin' },
+        permissions: ['contract:read'],
+        isSuperAdmin: false,
+      },
+      logoutReason: null,
+      isBootstrapping: true,
+    })
+
+    renderHook(() => useSessionBootstrap())
+
+    expect(useSessionStore.getState().isBootstrapping).toBe(false)
+  })
+
+  it('CA-06-12: isBootstrapping pasa a false tras resolver GET /auth/me (éxito)', async () => {
+    vi.mocked(authApi.me).mockResolvedValueOnce({
+      data: {
+        user: { id: 'user-1', email: 'owner@a.com', full_name: 'Owner Uno' },
+        organization: { id: 'org-1', name: 'Inmobiliaria Uno' },
+        role: 'owner',
+        permissions: ['contract:read'],
+        is_super_admin: false,
+      },
+    })
+
+    expect(useSessionStore.getState().isBootstrapping).toBe(true)
+
+    renderHook(() => useSessionBootstrap())
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().isBootstrapping).toBe(false)
+    })
+  })
+
+  it('CA-06-13: isBootstrapping pasa a false tras un 401 de GET /auth/me (error)', async () => {
+    vi.mocked(authApi.me).mockRejectedValueOnce(
+      new AdminPropApiError('UNAUTHORIZED', 401, 'Tu sesión expiró.'),
+    )
+
+    renderHook(() => useSessionBootstrap())
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().isBootstrapping).toBe(false)
+    })
   })
 })
