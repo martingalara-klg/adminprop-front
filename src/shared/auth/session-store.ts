@@ -7,9 +7,13 @@
 // Razon de persistir: al recargar, mostramos la UI segun rol antes de que
 // el primer request confirme la sesion contra el backend. Si la cookie
 // expiro, el primer request falla -> el consumidor de #6 fuerza logout.
+//
+// issue #21 (sdd_03 v1.6 §1): `permissions[]`/`is_super_admin` son AHORA
+// valores reales que trae el backend en login/accept-invitation/`/auth/me`
+// -- ya no se derivan de un mapa client-side (`role-permissions.ts`,
+// eliminado por este issue).
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { permissionsForRole } from './role-permissions'
 
 export type SessionOrganization = {
   id: string
@@ -21,27 +25,29 @@ export type Session = {
   userId: string
   email: string
   fullName: string
-  organization: SessionOrganization
+  // `null` solo para sesiones de Super Admin (sdd_03 §1 v1.6: el JWT de
+  // `/superadmin/*` no lleva `org`/`role`) -- rehidratadas via `/auth/me`.
+  organization: SessionOrganization | null
   permissions: string[]
-  // sdd_03 §1 no expone `is_super_admin` en el body de /auth/login (el JWT
-  // de superadmin ademas no lleva `org`/`role` -- flujo separado, fuera de
-  // alcance de #5). Default false; #6 lo resuelve cuando el backend exponga
-  // el claim en un response leible por el cliente.
   isSuperAdmin: boolean
 }
 
 type SessionState = {
   session: Session | null
+  // Mensaje es-AR a mostrar tras un logout forzado (ej: `MEMBERSHIP_INACTIVE`
+  // detectado al rehidratar via `/auth/me`). Efímero -- nunca persistido.
+  logoutReason: string | null
   setSession: (session: Session) => void
-  clearSession: () => void
+  clearSession: (reason?: string) => void
 }
 
 export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
       session: null,
-      setSession: (session) => set({ session }),
-      clearSession: () => set({ session: null }),
+      logoutReason: null,
+      setSession: (session) => set({ session, logoutReason: null }),
+      clearSession: (reason) => set({ session: null, logoutReason: reason ?? null }),
     }),
     {
       name: 'adminprop:session',
@@ -50,19 +56,21 @@ export const useSessionStore = create<SessionState>()(
   ),
 )
 
-/** Construye el `Session` del store a partir de un `user` + `organization` de sdd_03 §1. */
+/** Construye el `Session` del store a partir de datos REALES de sdd_03 §1 v1.6. */
 export function buildSession(params: {
   userId: string
   email: string
   fullName: string
-  organization: SessionOrganization
+  organization: SessionOrganization | null
+  permissions: string[]
+  isSuperAdmin: boolean
 }): Session {
   return {
     userId: params.userId,
     email: params.email,
     fullName: params.fullName,
     organization: params.organization,
-    permissions: permissionsForRole(params.organization.role),
-    isSuperAdmin: false,
+    permissions: params.permissions,
+    isSuperAdmin: params.isSuperAdmin,
   }
 }

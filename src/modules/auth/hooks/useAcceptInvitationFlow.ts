@@ -14,13 +14,15 @@ export function useAcceptInvitationFlow() {
     mutationFn: (payload: { token: string; full_name: string; password: string }) =>
       authApi.acceptInvitation(payload),
     onSuccess: (response) => {
-      const { user, organization } = response.data
+      const { user, organization, permissions, is_super_admin } = response.data
       useSessionStore.getState().setSession(
         buildSession({
           userId: user.id,
           email: user.email,
           fullName: user.full_name,
           organization,
+          permissions,
+          isSuperAdmin: is_super_admin,
         }),
       )
       navigate('/')
