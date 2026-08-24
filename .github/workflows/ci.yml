@@ -179,7 +179,7 @@ jobs:
           mkdir -p keys
           openssl genrsa -out keys/private.pem 2048
           openssl rsa -in keys/private.pem -pubout -out keys/public.pem
-          DATABASE_URL=postgresql+psycopg2://adminprop:adminprop@localhost:5432/adminprop_e2e alembic upgrade head
+          MIGRATIONS_DATABASE_URL=postgresql+psycopg2://adminprop:adminprop@localhost:5432/adminprop_e2e alembic upgrade head
           DATABASE_URL=postgresql+psycopg2://adminprop:adminprop@localhost:5432/adminprop_e2e \
           REDIS_URL=redis://localhost:6379/0 \
           APP_ENV=test \
