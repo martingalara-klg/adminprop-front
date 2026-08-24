@@ -27,7 +27,12 @@ describe('usePermission / usePermissions', () => {
         email: 'm@a.com',
         fullName: 'Mario Mantenimiento',
         organization: { id: 'org-1', name: 'Org 1', role: 'maintenance' },
-        permissions: ['work-order:read', 'work-order:quote', 'work-order:close', 'notification:read'],
+        permissions: [
+          'work-order:read',
+          'work-order:quote',
+          'work-order:close',
+          'notification:read',
+        ],
         isSuperAdmin: false,
       }),
     )
@@ -51,9 +56,7 @@ describe('usePermission / usePermissions', () => {
       }),
     )
 
-    const { result } = renderHook(() =>
-      usePermissions(['contract:read', 'organization:configure']),
-    )
+    const { result } = renderHook(() => usePermissions(['contract:read', 'organization:configure']))
     expect(result.current).toBe(false)
   })
 })

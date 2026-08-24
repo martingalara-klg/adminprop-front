@@ -12,6 +12,7 @@ const API_BASE = 'http://localhost:8000/v1'
 let refreshCallCount = 0
 let protectedCallCount = 0
 let loginCallCount = 0
+let meCallCount = 0
 
 const server = setupServer(
   http.post(`${API_BASE}/protected`, () => {
@@ -45,6 +46,14 @@ const server = setupServer(
       { status: 401 },
     )
   }),
+
+  http.get(`${API_BASE}/auth/me`, () => {
+    meCallCount += 1
+    return HttpResponse.json(
+      { error: { code: 'UNAUTHORIZED', message: 'Tu sesión expiró.', field: null, details: {} } },
+      { status: 401 },
+    )
+  }),
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -53,6 +62,7 @@ afterEach(() => {
   refreshCallCount = 0
   protectedCallCount = 0
   loginCallCount = 0
+  meCallCount = 0
 })
 afterAll(() => server.close())
 
@@ -151,6 +161,18 @@ describe('http-client — interceptor de refresh (issue #4)', () => {
     await expect(authApi.refresh()).rejects.toBeTruthy()
 
     expect(refreshCallCount).toBe(1)
+    location.restore()
+  })
+
+  it('CA-21-06: nunca dispara refresh sobre GET /auth/me -- su 401 es "sin sesión", no expiración a mitad de uso (issue #21)', async () => {
+    const { httpClient } = await import('../http-client')
+    const location = stubLocationAssign()
+
+    await expect(httpClient.get('/auth/me')).rejects.toBeTruthy()
+
+    expect(refreshCallCount).toBe(0)
+    expect(meCallCount).toBe(1)
+    expect(location.assign).not.toHaveBeenCalled()
     location.restore()
   })
 })

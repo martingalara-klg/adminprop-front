@@ -10,7 +10,7 @@
 //   GET  /auth/reset-password/:token → 200 | 404 | 410
 //   POST /auth/reset-password     → 200
 //   GET  /auth/me                 → 200 { data: { user, organization, role, permissions[], is_super_admin } } | 401 | 403 MEMBERSHIP_INACTIVE
-import { httpClient } from './http-client'
+import { AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH, AUTH_ME_PATH, AUTH_REFRESH_PATH, httpClient } from './http-client'
 import type { components } from './generated/types'
 
 type LoginResponse = components['schemas']['LoginResponse']
@@ -23,10 +23,6 @@ type ResetPasswordTokenResponse = components['schemas']['ResetPasswordTokenRespo
 type ResetPasswordRequest = components['schemas']['ResetPasswordRequest']
 type ResetPasswordResponse = components['schemas']['ResetPasswordResponse']
 type MeResponse = components['schemas']['MeResponse']
-
-export const AUTH_REFRESH_PATH = '/auth/refresh'
-export const AUTH_LOGIN_PATH = '/auth/login'
-export const AUTH_LOGOUT_PATH = '/auth/logout'
 
 export const authApi = {
   /**
@@ -104,7 +100,7 @@ export const authApi = {
    * membresía fue desactivada después de emitido el JWT.
    */
   async me(opts?: { signal?: AbortSignal }): Promise<MeResponse> {
-    const response = await httpClient.get<MeResponse>('/auth/me', { signal: opts?.signal })
+    const response = await httpClient.get<MeResponse>(AUTH_ME_PATH, { signal: opts?.signal })
     return response.data
   },
 }

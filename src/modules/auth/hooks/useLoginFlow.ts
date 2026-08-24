@@ -15,7 +15,8 @@ import { AdminPropApiError, mapError } from '@/api/errors'
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
 import type { components } from '@/api/generated/types'
 
-type OrganizationSummary = components['schemas']['adminprop__modules__auth__schemas__OrganizationSummary']
+type OrganizationSummary =
+  components['schemas']['adminprop__modules__auth__schemas__OrganizationSummary']
 
 export type LoginFlowState =
   | { kind: 'idle' }

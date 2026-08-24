@@ -38,7 +38,9 @@ export function useSessionBootstrap(): void {
             userId: user.id,
             email: user.email,
             fullName: user.full_name,
-            organization: organization ? { id: organization.id, name: organization.name, role: role ?? '' } : null,
+            organization: organization
+              ? { id: organization.id, name: organization.name, role: role ?? '' }
+              : null,
             permissions,
             isSuperAdmin: is_super_admin,
           }),
