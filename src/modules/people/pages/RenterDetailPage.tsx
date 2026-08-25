@@ -12,6 +12,10 @@ import type { UpdateRenterInput } from '../schemas/people.schema'
 
 import { RenterContactForm } from '../components/RenterContactForm'
 import { RenterDebtPanel } from '../components/RenterDebtPanel'
+// RF-08 (spec_module_04_cobranzas.md): el certificado es una acción
+// sobre el inquilino, no un dato nuevo que duplique RenterDebtPanel —
+// vive en el módulo de cobranzas (dueño del endpoint) y se monta acá.
+import { DebtCertificateButton } from '@/modules/payments/components/DebtCertificateButton'
 import { useRenterDetail } from '../hooks/useRenterDetail'
 import { useRenterDebt } from '../hooks/useRenterDebt'
 import { useUpdateRenter } from '../hooks/useUpdateRenter'
@@ -88,6 +92,10 @@ export function RenterDetailPage() {
         {debtQuery.isLoading ? <Spinner label="Cargando estado de deuda..." /> : null}
         {debtQuery.isError ? <ErrorState message={resolveErrorMessage(debtQuery.error)} /> : null}
         {debtQuery.data ? <RenterDebtPanel entries={debtQuery.data.data} /> : null}
+      </section>
+
+      <section>
+        <DebtCertificateButton renterId={renter.id} />
       </section>
 
       <section>
