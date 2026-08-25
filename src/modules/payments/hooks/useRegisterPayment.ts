@@ -1,0 +1,24 @@
+// src/modules/payments/hooks/useRegisterPayment.ts
+//
+// RF-03 + CA-04-03/04/05/06: registro de cobro. Invalida el panel del
+// mes y el detalle del período (el saldo/estado cambian) y el estado de
+// deuda global (RF-06).
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { paymentsApi, type PaymentCreate } from '@/api/payments.api'
+
+export function useRegisterPayment() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ rentPeriodId, payload }: { rentPeriodId: string; payload: PaymentCreate }) =>
+      paymentsApi.registerPayment(rentPeriodId, payload),
+    retry: 0,
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['payments', 'rent-periods'] })
+      queryClient.invalidateQueries({
+        queryKey: ['payments', 'rent-periods', 'detail', variables.rentPeriodId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['payments', 'debt'] })
+    },
+  })
+}
