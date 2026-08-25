@@ -1,9 +1,9 @@
 // src/api/payments.api.ts
 //
-// Cliente del módulo Cobranzas — sdd_03 §9 "Cobranzas" (v1.6):
+// Cliente del módulo Cobranzas — sdd_03 §9 "Cobranzas" (v1.7):
 //
 //   GET  /rent-periods                        (?period=YYYY-MM&status=&in_arrears=&property_id=&landlord_id=&renter_id= — panel del mes, RF-02)
-//   GET  /rent-periods/:id
+//   GET  /rent-periods/:id                    (v1.7, issue #87: incluye `payments[]` — historial completo, anulados incluidos)
 //   GET  /rent-periods/:id/interest-preview    (?payment_date= — RF-04, RN-P02/P03)
 //   POST /rent-periods/:id/payments            (registrar cobro — RN-P04/P05/P06/P07)
 //   POST /payments/:id/void                    (anulación lógica con motivo — RN-D04)
@@ -11,11 +11,11 @@
 //   POST /renters/:id/debt-certificate         (descarga PDF del libre deuda — RF-08)
 //   GET  /debt                                 (?landlord_id=&renter_id=&min_days= — estado de deuda global, RF-06)
 //
-// No existe `GET /payments` ni `GET /payments/:id` en sdd_03 §9 (v1.6):
-// el único momento en que el frontend conoce el `id` de un cobro es la
-// respuesta de `registerPayment` — por eso "Descargar recibo" y "Anular
-// cobro" sólo se ofrecen inmediatamente después de registrar el cobro
-// (ver decisión de UX en el PR).
+// No existe `GET /payments` en sdd_03 §9: `GET /rent-periods/:id` (v1.7)
+// es la única vía para conocer el `id` de cobros previos — por eso el
+// historial del período (issue #33) es la superficie desde la que se
+// ofrece "Descargar recibo" y "Anular cobro" por fila, ya no sólo sobre
+// el cobro recién registrado en la sesión (limitación del #12).
 import { httpClient } from './http-client'
 import { downloadFile } from './download'
 import type { components } from './generated/types'
@@ -23,6 +23,8 @@ import type { components } from './generated/types'
 export type RentPeriodSummary = components['schemas']['RentPeriodSummary']
 export type RentPeriodListResponse = components['schemas']['RentPeriodListResponse']
 export type RentPeriodResponse = components['schemas']['RentPeriodResponse']
+export type RentPeriodDetail = components['schemas']['RentPeriodDetail']
+export type RentPeriodDetailResponse = components['schemas']['RentPeriodDetailResponse']
 export type InterestPreviewData = components['schemas']['InterestPreviewData']
 export type PaymentCreate = components['schemas']['PaymentCreate']
 export type PaymentSummary = components['schemas']['PaymentSummary']
@@ -65,13 +67,15 @@ export const paymentsApi = {
     return response.data
   },
 
+  /** v1.7 (issue #87): incluye `payments[]` — historial del período, anulados incluidos. */
   async getRentPeriod(
     rentPeriodId: string,
     opts?: { signal?: AbortSignal },
-  ): Promise<RentPeriodResponse> {
-    const response = await httpClient.get<RentPeriodResponse>(`/rent-periods/${rentPeriodId}`, {
-      signal: opts?.signal,
-    })
+  ): Promise<RentPeriodDetailResponse> {
+    const response = await httpClient.get<RentPeriodDetailResponse>(
+      `/rent-periods/${rentPeriodId}`,
+      { signal: opts?.signal },
+    )
     return response.data
   },
 
