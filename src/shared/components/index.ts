@@ -1,6 +1,8 @@
 export { Spinner } from './Spinner'
 export { ErrorState } from './ErrorState'
 export { EmptyState } from './EmptyState'
+export { ForbiddenState } from './ForbiddenState'
+export { ConfirmDeleteButton } from './ConfirmDeleteButton'
 export { Button, buttonVariants } from './ui/button'
 export type { ButtonProps } from './ui/button'
 export { Input } from './ui/input'

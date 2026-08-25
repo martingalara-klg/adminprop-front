@@ -4,11 +4,10 @@
 // (CA-02-07/RN-A01).
 import { useState } from 'react'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState } from '@/shared/components'
+import { Spinner, ErrorState, EmptyState, ForbiddenState } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { RenterCreate } from '@/api/people.api'
 
-import { ForbiddenState } from '../components/ForbiddenState'
 import { PeopleTabsNav } from '../components/PeopleTabsNav'
 import { RentersTable } from '../components/RentersTable'
 import { RenterForm } from '../components/RenterForm'
