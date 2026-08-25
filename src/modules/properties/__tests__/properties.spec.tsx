@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
 import { AdminPropApiError } from '@/api/errors'
+import type { PropertyWorkOrderHistoryEntry } from '@/api/properties.api'
 import { renderPropertiesApp } from './test-router'
 
 vi.mock('@/api/properties.api', () => ({
@@ -102,7 +103,7 @@ const SERVICE_ACCOUNTS = [
   { id: 'sa-6', property_id: 'p-1', service_type: 'expensas', account_number: '7007', secondary_number: null, notes: null, created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' },
 ]
 
-const WORK_ORDERS = [
+const WORK_ORDERS: PropertyWorkOrderHistoryEntry[] = [
   {
     id: 'wo-1',
     title: 'Arreglo de cañería',
@@ -117,7 +118,15 @@ const WORK_ORDERS = [
 ]
 
 const RECURRING_CHARGES = [
-  { id: 'rc-1', property_id: 'p-1', charge_type: 'rentas', label: 'Rentas', is_active: true },
+  {
+    id: 'rc-1',
+    property_id: 'p-1',
+    charge_type: 'rentas',
+    label: 'Rentas',
+    is_active: true,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  },
 ]
 
 const ACTIVE_CONTRACT = {
