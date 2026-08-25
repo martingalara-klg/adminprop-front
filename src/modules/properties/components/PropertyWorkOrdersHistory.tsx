@@ -1,9 +1,13 @@
 // src/modules/properties/components/PropertyWorkOrdersHistory.tsx
 //
 // RF-03 + CA-01-05 (UC-16): "Historial de reparaciones con pagador y
-// costos — link al Módulo 6". El módulo Mantenimiento (#13) todavía no
-// tiene ficha de detalle por pedido, así que se muestra la tabla de
-// datos sin links a pantallas inexistentes.
+// costos — link al Módulo 6". El módulo Mantenimiento (#13) ya tiene
+// ficha de detalle por pedido (`/maintenance/:workOrderId`) — el título
+// linkea ahí. Sólo owner/admin llegan a esta ficha (gate por
+// `property:read`, que `maintenance` no tiene — RN-03), y ambos también
+// tienen `work-order:read`, así que el link nunca lleva a un
+// ForbiddenState.
+import { Link } from 'react-router-dom'
 import { EmptyState } from '@/shared/components'
 import type { PropertyWorkOrderHistoryEntry } from '@/api/properties.api'
 import { formatDate, formatMoney } from '@/shared/utils/format'
@@ -46,7 +50,14 @@ export function PropertyWorkOrdersHistory({ workOrders }: Props) {
       <tbody>
         {workOrders.map((workOrder) => (
           <tr key={workOrder.id} className="border-b last:border-0">
-            <td className="py-2 pr-4">{workOrder.title}</td>
+            <td className="py-2 pr-4">
+              <Link
+                to={`/maintenance/${workOrder.id}`}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {workOrder.title}
+              </Link>
+            </td>
             <td className="py-2 pr-4">{STATUS_LABELS[workOrder.status] ?? workOrder.status}</td>
             <td className="py-2 pr-4 text-muted-foreground">
               {PAYER_LABELS[workOrder.payer] ?? workOrder.payer}

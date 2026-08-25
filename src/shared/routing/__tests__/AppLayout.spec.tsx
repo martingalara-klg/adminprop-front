@@ -158,7 +158,10 @@ describe('UC-06 — Shell de la app (#6)', () => {
     renderApp('/')
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Mantenimiento' })).toBeInTheDocument()
+      // #13 le dio contenido real a MaintenanceListPage (antes era un
+      // ModulePlaceholder con título exacto "Mantenimiento") — el heading
+      // ahora incluye el subtítulo del módulo; se matchea por regex.
+      expect(screen.getByRole('heading', { name: /mantenimiento/i })).toBeInTheDocument()
     })
   })
 })
