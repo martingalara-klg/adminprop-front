@@ -47,7 +47,7 @@ const addressField = z
   .min(5, 'La dirección debe tener entre 5 y 300 caracteres.')
   .max(300, 'La dirección debe tener entre 5 y 300 caracteres.')
 
-const landlordIdField = z.string().uuid('Seleccioná un propietario.')
+const landlordIdField = z.string().min(1, 'Seleccioná un propietario.')
 
 const propertyTypeField = z.string().max(50, 'El tipo no puede superar los 50 caracteres.')
 
