@@ -42,7 +42,7 @@ describe('UC-06 — Guard de /superadmin/* (#6)', () => {
       expect(screen.getByRole('heading', { name: 'Propiedades' })).toBeInTheDocument()
     })
 
-    expect(screen.queryByText('Organizaciones (superadmin)')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Organizaciones' })).not.toBeInTheDocument()
   })
 
   it('CA-06-09: sin sesión, /superadmin/* redirige encadenado hasta /login', async () => {
@@ -72,7 +72,7 @@ describe('UC-06 — Guard de /superadmin/* (#6)', () => {
     renderApp('/superadmin/organizations')
 
     await waitFor(() => {
-      expect(screen.getByText('Organizaciones (superadmin)')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Organizaciones' })).toBeInTheDocument()
     })
   })
 })
