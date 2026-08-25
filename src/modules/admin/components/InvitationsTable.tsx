@@ -4,14 +4,11 @@
 // una invitación vencida se muestra como tal (equivalente al estado
 // `expired` de docs/skills/flow-implementation.md para flujos con token).
 import type { InvitationSummary } from '@/api/admin.api'
+import { isInvitationExpired } from '../types/admin.types'
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
   maintenance: 'Mantenimiento',
-}
-
-export function isInvitationExpired(invitation: InvitationSummary): boolean {
-  return new Date(invitation.expires_at).getTime() < Date.now()
 }
 
 type Props = {

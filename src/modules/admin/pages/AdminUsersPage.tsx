@@ -29,8 +29,10 @@ export function AdminUsersPage() {
 
   // idle/loading/error/empty/success — flow-implementation.md. `expired`
   // no aplica a este listado (aplica por-invitación, ver InvitationsTable).
-  const usersQuery = useUsersList()
-  const invitationsQuery = useInvitationsList()
+  // `enabled: canManageUsers` — sin `user:manage` el backend rechaza con
+  // 403 FORBIDDEN; no disparamos el request (ver ForbiddenState debajo).
+  const usersQuery = useUsersList({}, canManageUsers)
+  const invitationsQuery = useInvitationsList({}, canManageUsers)
 
   const changeRole = useChangeUserRole()
   const deactivate = useDeactivateUser()
