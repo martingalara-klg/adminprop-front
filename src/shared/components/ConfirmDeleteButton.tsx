@@ -1,7 +1,12 @@
-// src/modules/people/components/ConfirmDeleteButton.tsx
+// src/shared/components/ConfirmDeleteButton.tsx
 //
-// CA-02-06: la baja es lógica (soft delete) pero irreversible desde la UI
-// — pide confirmación explícita en 2 pasos (mismo patrón que
+// Movido desde src/modules/people/components/ConfirmDeleteButton.tsx (#9)
+// al ser reutilizado por otro módulo (#10, propiedades) — mismo criterio
+// de module-structure.md: componente compartido entre módulos vive en
+// src/shared/components/.
+//
+// CA-02-06/CA-01-03: la baja es lógica (soft delete) pero irreversible
+// desde la UI — pide confirmación explícita en 2 pasos (mismo patrón que
 // OrganizationStatusChangeAction) antes de disparar el DELETE. Si el
 // backend responde `409 ENTITY_HAS_DEPENDENCIES`, el mensaje llega vía
 // `errorMessage` (mapa es-AR, ver error-codes.es-AR.ts) y NO limpia el

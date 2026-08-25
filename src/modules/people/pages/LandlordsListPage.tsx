@@ -6,11 +6,10 @@
 // request (ver ForbiddenState).
 import { useState } from 'react'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState } from '@/shared/components'
+import { Spinner, ErrorState, EmptyState, ForbiddenState } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { LandlordCreate } from '@/api/people.api'
 
-import { ForbiddenState } from '../components/ForbiddenState'
 import { PeopleTabsNav } from '../components/PeopleTabsNav'
 import { LandlordsTable } from '../components/LandlordsTable'
 import { LandlordForm } from '../components/LandlordForm'
