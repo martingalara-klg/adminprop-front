@@ -19,7 +19,14 @@ const server = setupServer(
     protectedCallCount += 1
     if (protectedCallCount === 1) {
       return HttpResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: 'Token ausente, expirado o invalido.', field: null, details: {} } },
+        {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Token ausente, expirado o invalido.',
+            field: null,
+            details: {},
+          },
+        },
         { status: 401 },
       )
     }
@@ -28,7 +35,14 @@ const server = setupServer(
 
   http.post(`${API_BASE}/always-401`, () => {
     return HttpResponse.json(
-      { error: { code: 'UNAUTHORIZED', message: 'Token ausente, expirado o invalido.', field: null, details: {} } },
+      {
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Token ausente, expirado o invalido.',
+          field: null,
+          details: {},
+        },
+      },
       { status: 401 },
     )
   }),
@@ -42,7 +56,14 @@ const server = setupServer(
   http.post(`${API_BASE}/auth/login`, () => {
     loginCallCount += 1
     return HttpResponse.json(
-      { error: { code: 'UNAUTHORIZED', message: 'Credenciales incorrectas.', field: null, details: {} } },
+      {
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Credenciales incorrectas.',
+          field: null,
+          details: {},
+        },
+      },
       { status: 401 },
     )
   }),
@@ -103,7 +124,14 @@ describe('http-client — interceptor de refresh (issue #4)', () => {
     server.use(
       http.post(`${API_BASE}/auth/refresh`, () =>
         HttpResponse.json(
-          { error: { code: 'UNAUTHORIZED', message: 'Token ausente, expirado o invalido.', field: null, details: {} } },
+          {
+            error: {
+              code: 'UNAUTHORIZED',
+              message: 'Token ausente, expirado o invalido.',
+              field: null,
+              details: {},
+            },
+          },
           { status: 401 },
         ),
       ),
@@ -135,7 +163,9 @@ describe('http-client — interceptor de refresh (issue #4)', () => {
   it('CA: nunca dispara refresh sobre el propio endpoint de login', async () => {
     const { httpClient } = await import('../http-client')
 
-    await expect(httpClient.post('/auth/login', { email: 'a@a.com', password: 'x' })).rejects.toBeTruthy()
+    await expect(
+      httpClient.post('/auth/login', { email: 'a@a.com', password: 'x' }),
+    ).rejects.toBeTruthy()
 
     expect(refreshCallCount).toBe(0)
     expect(loginCallCount).toBe(1)
@@ -146,7 +176,14 @@ describe('http-client — interceptor de refresh (issue #4)', () => {
       http.post(`${API_BASE}/auth/refresh`, () => {
         refreshCallCount += 1
         return HttpResponse.json(
-          { error: { code: 'UNAUTHORIZED', message: 'Token ausente, expirado o invalido.', field: null, details: {} } },
+          {
+            error: {
+              code: 'UNAUTHORIZED',
+              message: 'Token ausente, expirado o invalido.',
+              field: null,
+              details: {},
+            },
+          },
           { status: 401 },
         )
       }),
@@ -174,5 +211,19 @@ describe('http-client — interceptor de refresh (issue #4)', () => {
     expect(meCallCount).toBe(1)
     expect(location.assign).not.toHaveBeenCalled()
     location.restore()
+  })
+
+  it('CA-15: cada request registra un breadcrumb con su X-Request-Id (issue #15, trazabilidad de errores)', async () => {
+    const { httpClient } = await import('../http-client')
+    const { clearRequestBreadcrumbs, getRequestBreadcrumbs } =
+      await import('@/shared/observability')
+    clearRequestBreadcrumbs()
+
+    await expect(httpClient.post('/always-401')).rejects.toBeTruthy()
+
+    const breadcrumbs = getRequestBreadcrumbs()
+    expect(breadcrumbs.length).toBeGreaterThan(0)
+    expect(breadcrumbs[0]?.requestId).toBeTruthy()
+    expect(breadcrumbs.some((b) => b.status === 401)).toBe(true)
   })
 })
