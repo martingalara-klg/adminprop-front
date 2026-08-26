@@ -23,6 +23,7 @@ vi.mock('@/api/people.api', () => ({
     updateRenter: vi.fn(),
     deleteRenter: vi.fn(),
     getRenterDebt: vi.fn(),
+    getLandlordSettlements: vi.fn(),
   },
 }))
 
@@ -62,6 +63,15 @@ const MAINTENANCE_SESSION = buildSession({
   // RN-A01: maintenance no accede a ningún endpoint de este módulo.
   permissions: ['work-order:read'],
   isSuperAdmin: false,
+})
+
+// Issue #14 — CA-05-07: variante con settlement:read para probar la
+// sección de liquidaciones de la ficha. Separada de OWNER_SESSION para
+// no disparar getLandlordSettlements en los tests preexistentes del #9
+// que no lo mockean.
+const OWNER_SESSION_WITH_SETTLEMENTS = buildSession({
+  ...OWNER_SESSION,
+  permissions: [...OWNER_SESSION.permissions, 'settlement:read'],
 })
 
 function setSession(session: ReturnType<typeof buildSession>) {
@@ -216,6 +226,35 @@ describe('Módulo 2 — Personas (#9)', () => {
 
     const bankInfoInput = await screen.findByLabelText('Datos bancarios')
     expect(bankInfoInput).toHaveValue('CBU 0000000000000000000000')
+  })
+
+  it('CA-05-07: la ficha del propietario muestra el historial de liquidaciones con link al detalle', async () => {
+    setSession(OWNER_SESSION_WITH_SETTLEMENTS)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({ data: LANDLORD_DETAIL })
+    vi.mocked(peopleApi.getLandlordSettlements).mockResolvedValueOnce({
+      data: [
+        {
+          id: 's-1',
+          landlord_id: 'l-1',
+          period: '2026-07-01',
+          status: 'issued',
+          net_amount: '150000.00',
+          commission_pct_used: '10.00',
+          needs_regeneration: true,
+          created_at: '2026-08-01T00:00:00Z',
+        },
+      ],
+    })
+
+    renderPeopleApp('/people/landlords/l-1')
+
+    await waitFor(() => screen.getByTestId('landlord-settlements-list'))
+    expect(screen.getByText('2026-07')).toBeInTheDocument()
+    expect(screen.getByText('Requiere regeneración')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver detalle' })).toHaveAttribute(
+      'href',
+      '/settlements/s-1',
+    )
   })
 
   it('CA-02-05: la ficha del inquilino muestra períodos adeudados, saldo, días de mora e interés sugerido', async () => {
