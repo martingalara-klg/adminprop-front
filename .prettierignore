@@ -1,0 +1,10 @@
+dist
+coverage
+playwright-report
+node_modules
+src/api/generated
+docs
+CLAUDE.md
+README.md
+.claude
+.github
