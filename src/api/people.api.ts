@@ -32,6 +32,7 @@ export type RenterListResponse = components['schemas']['RenterListResponse']
 export type RenterResponse = components['schemas']['RenterResponse']
 export type RenterDebtResponse = components['schemas']['RenterDebtResponse']
 export type DebtEntryData = components['schemas']['DebtEntryData']
+export type SettlementListResponse = components['schemas']['SettlementListResponse']
 
 export type ListPageFilters = { cursor?: string; limit?: number }
 
@@ -132,6 +133,24 @@ export const peopleApi = {
     const response = await httpClient.get<RenterDebtResponse>(`/renters/${renterId}/debt`, {
       signal: opts?.signal,
     })
+    return response.data
+  },
+
+  /**
+   * sdd_03 §5 "GET /landlords/:id/settlements" — historial de
+   * liquidaciones del propietario (issue #14, spec_module_05 §CA-05-07):
+   * punto de entrada desde la ficha. El detalle/export de cada
+   * liquidación sigue viviendo en `settlementsApi` (`GET /settlements/:id`
+   * / `.../export`).
+   */
+  async getLandlordSettlements(
+    landlordId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<SettlementListResponse> {
+    const response = await httpClient.get<SettlementListResponse>(
+      `/landlords/${landlordId}/settlements`,
+      { signal: opts?.signal },
+    )
     return response.data
   },
 }
