@@ -22,6 +22,11 @@ import { v4 as uuidv4 } from 'uuid'
 // constantes de ruta viven ACA (import.ts -> auth.api.ts, una sola
 // dirección) y no al revés.
 import { authApi } from './auth.api'
+// issue #15 — breadcrumbs con X-Request-Id para trazabilidad de errores.
+// Sentry no está instalado (post-infra, decisión #111); este módulo es el
+// único punto de integración a reemplazar cuando se instale el SDK (ver
+// docstring de src/shared/observability/requestBreadcrumbs.ts).
+import { recordRequestBreadcrumb, reportRequestError } from '@/shared/observability'
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/v1'
 
@@ -67,6 +72,18 @@ export const httpClient = axios.create({
 // ─── Request: propagar X-Request-Id (sdd_04 §4.6) ──────────────────────────
 httpClient.interceptors.request.use((config) => {
   config.headers['X-Request-Id'] = config.headers['X-Request-Id'] ?? uuidv4()
+
+  // issue #15: breadcrumb del request saliente ANTES de la respuesta — el
+  // trail completo (no solo el error final) es lo que hace útil un
+  // breadcrumb de Sentry para reconstruir qué pasó antes de una falla.
+  recordRequestBreadcrumb({
+    requestId: String(config.headers['X-Request-Id']),
+    method: (config.method ?? 'get').toUpperCase(),
+    url: config.url ?? '',
+    status: 'pending',
+    timestamp: new Date().toISOString(),
+  })
+
   return config
 })
 
@@ -116,3 +133,43 @@ httpClient.interceptors.response.use(undefined, (error: AxiosError) => {
   }
   return Promise.reject(error)
 })
+
+// ─── Response: breadcrumb final + reporte de error (issue #15) ─────────────
+// Registrado AL FINAL de la cadena para capturar el resultado definitivo
+// (después del retry de 401 y del side-effect de 429), no el intento
+// inicial. En error, además de la breadcrumb, reporta con el trail
+// completo previo (hoy console.error; mañana Sentry.captureException).
+httpClient.interceptors.response.use(
+  (response) => {
+    const requestId = String(response.config.headers?.['X-Request-Id'] ?? '')
+    recordRequestBreadcrumb({
+      requestId,
+      method: (response.config.method ?? 'get').toUpperCase(),
+      url: response.config.url ?? '',
+      status: response.status,
+      timestamp: new Date().toISOString(),
+    })
+    return response
+  },
+  (error: AxiosError) => {
+    const config = error.config
+    const requestId = String(config?.headers?.['X-Request-Id'] ?? '')
+    const method = (config?.method ?? 'get').toUpperCase()
+    const url = config?.url ?? ''
+    const status = error.response?.status ?? 0
+
+    recordRequestBreadcrumb({ requestId, method, url, status, timestamp: new Date().toISOString() })
+
+    const body = error.response?.data as { error?: { code?: string; message?: string } } | undefined
+    reportRequestError({
+      requestId,
+      method,
+      url,
+      status,
+      code: body?.error?.code ?? 'NETWORK_ERROR',
+      message: body?.error?.message ?? error.message,
+    })
+
+    return Promise.reject(error)
+  },
+)
