@@ -13,18 +13,26 @@ import type { UpdateLandlordContactInput, UpdateLandlordCommissionInput } from '
 import { LandlordContactForm } from '../components/LandlordContactForm'
 import { LandlordCommissionField } from '../components/LandlordCommissionField'
 import { LandlordPropertiesList } from '../components/LandlordPropertiesList'
+import { LandlordSettlementsList } from '../components/LandlordSettlementsList'
 import { useLandlordDetail } from '../hooks/useLandlordDetail'
 import { useUpdateLandlord } from '../hooks/useUpdateLandlord'
 import { useDeleteLandlord } from '../hooks/useDeleteLandlord'
+import { useLandlordSettlements } from '../hooks/useLandlordSettlements'
 
 export function LandlordDetailPage() {
   const { landlordId } = useParams<{ landlordId: string }>()
   const navigate = useNavigate()
   const canReadLandlords = usePermission('landlord:read')
+  const canReadSettlements = usePermission('settlement:read')
 
   const landlordQuery = useLandlordDetail(canReadLandlords ? landlordId : undefined)
   const updateLandlord = useUpdateLandlord()
   const deleteLandlord = useDeleteLandlord()
+  // CA-05-07 (issue #14): historial de liquidaciones — permiso propio
+  // (settlement:read), independiente de landlord:read.
+  const settlementsQuery = useLandlordSettlements(
+    canReadSettlements ? landlordId : undefined,
+  )
 
   const [contactError, setContactError] = useState<string | null>(null)
   const [commissionError, setCommissionError] = useState<string | null>(null)
@@ -114,6 +122,17 @@ export function LandlordDetailPage() {
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Propiedades</h2>
         <LandlordPropertiesList properties={landlord.properties ?? []} />
       </section>
+
+      {canReadSettlements ? (
+        <section>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Liquidaciones</h2>
+          {settlementsQuery.isLoading ? <Spinner label="Cargando liquidaciones..." /> : null}
+          {settlementsQuery.isError ? <ErrorState error={settlementsQuery.error} /> : null}
+          {settlementsQuery.data ? (
+            <LandlordSettlementsList settlements={settlementsQuery.data.data} />
+          ) : null}
+        </section>
+      ) : null}
 
       <section>
         <ConfirmDeleteButton
