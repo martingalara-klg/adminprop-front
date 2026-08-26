@@ -133,12 +133,20 @@ export function RentPeriodDetailPage() {
             onDateChange={setPaymentDate}
             onSubmit={handleRegisterPayment}
           />
-          {registerSuccess ? (
-            <p className="mt-2 text-sm font-medium text-green-700" role="status">
-              Cobro registrado — ver el historial de cobros abajo.
-            </p>
-          ) : null}
         </section>
+      ) : null}
+
+      {/* issue #39 -- `registerSuccess` vivía anidado en el bloque de
+          arriba, gateado por `status !== 'paid'`. La invalidación de query
+          que sigue a un cobro exitoso (useRegisterPayment) deja
+          `rentPeriod.status === 'paid'` en el mismo commit que
+          `registerSuccess = true`, así que el mensaje nunca llegaba a
+          montarse (CA-16-05, tests/e2e/payments.spec.ts). Vive afuera,
+          gateado solo por `registerSuccess`. */}
+      {registerSuccess ? (
+        <p className="text-sm font-medium text-green-700" role="status">
+          Cobro registrado — ver el historial de cobros abajo.
+        </p>
       ) : null}
 
       {rentPeriod.status === 'paid' ? (
