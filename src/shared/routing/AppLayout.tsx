@@ -10,6 +10,7 @@ import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useSession } from '@/shared/auth/useSession'
 import { useSessionStore } from '@/shared/auth/session-store'
 import { Spinner } from '@/shared/components/Spinner'
+import { NotificationBell } from '@/modules/notifications/components/NotificationBell'
 import { useVisibleNavItems } from './useNavItems'
 
 export function AppLayout() {
@@ -60,9 +61,12 @@ export function AppLayout() {
               {session.organization?.name ?? 'Super Admin'}
             </p>
           </div>
-          <NavLink to="/logout" className="text-sm text-destructive hover:underline">
-            Cerrar sesión
-          </NavLink>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <NavLink to="/logout" className="text-sm text-destructive hover:underline">
+              Cerrar sesión
+            </NavLink>
+          </div>
         </header>
         <main className="p-6">
           <Outlet />

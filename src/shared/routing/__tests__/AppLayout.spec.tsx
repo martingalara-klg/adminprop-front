@@ -2,11 +2,23 @@
 // SDD: CLAUDE.md front §4 "Reglas duras del cliente" + §"Permisos".
 // issue #6 — CA: shell real (nav por permisos, guard superadmin, redirect
 // de raíz según sesión).
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
 import { renderShellApp as renderApp } from './test-shell-router'
+
+// issue #15: AppLayout ahora monta <NotificationBell/> en el header (gate
+// por `notification:read`, presente en los 3 roles) — mockeado acá para
+// no disparar requests reales; el comportamiento del bell tiene su propia
+// suite en src/modules/notifications/__tests__/notifications.spec.tsx.
+vi.mock('@/api/notifications.api', () => ({
+  notificationsApi: {
+    list: vi.fn().mockResolvedValue({ data: [], meta: { unread_count: 0 } }),
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+  },
+}))
 
 describe('UC-06 — Shell de la app (#6)', () => {
   afterEach(() => {
