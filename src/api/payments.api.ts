@@ -22,7 +22,6 @@ import type { components } from './generated/types'
 
 export type RentPeriodSummary = components['schemas']['RentPeriodSummary']
 export type RentPeriodListResponse = components['schemas']['RentPeriodListResponse']
-export type RentPeriodResponse = components['schemas']['RentPeriodResponse']
 export type RentPeriodDetail = components['schemas']['RentPeriodDetail']
 export type RentPeriodDetailResponse = components['schemas']['RentPeriodDetailResponse']
 export type InterestPreviewData = components['schemas']['InterestPreviewData']
