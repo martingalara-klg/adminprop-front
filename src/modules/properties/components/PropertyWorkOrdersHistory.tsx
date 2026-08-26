@@ -7,10 +7,35 @@
 // `property:read`, que `maintenance` no tiene — RN-03), y ambos también
 // tienen `work-order:read`, así que el link nunca lleva a un
 // ForbiddenState.
+//
+// Issue #14 (RN-L04): `settled_in_settlement_id` (poblado sólo en
+// reparaciones `payer=agency` ya descontadas) reemplaza acá el texto
+// estático "pendiente de liquidar" que #13 dejó en
+// WorkOrderDetailPage — este historial es el único punto de la UI que
+// recibe el campo (`PropertyWorkOrderHistoryEntry`, no `WorkOrderDetail`),
+// así que es donde puede mostrarse el vínculo real a la liquidación en
+// vez de sólo la advertencia genérica.
 import { Link } from 'react-router-dom'
 import { EmptyState } from '@/shared/components'
 import type { PropertyWorkOrderHistoryEntry } from '@/api/properties.api'
 import { formatDate, formatMoney } from '@/shared/utils/format'
+
+function SettlementStatus({ workOrder }: { workOrder: PropertyWorkOrderHistoryEntry }) {
+  if (workOrder.payer !== 'agency' || workOrder.status !== 'closed') return <>—</>
+
+  if (workOrder.settled_in_settlement_id) {
+    return (
+      <Link
+        to={`/settlements/${workOrder.settled_in_settlement_id}`}
+        className="font-medium text-primary underline-offset-4 hover:underline"
+      >
+        Liquidado
+      </Link>
+    )
+  }
+
+  return <span className="text-amber-700">Pendiente de liquidar</span>
+}
 
 const STATUS_LABELS: Record<string, string> = {
   open: 'Abierta',
@@ -44,6 +69,7 @@ export function PropertyWorkOrdersHistory({ workOrders }: Props) {
           <th className="py-2 pr-4 font-medium">Estado</th>
           <th className="py-2 pr-4 font-medium">Pagador</th>
           <th className="py-2 pr-4 font-medium">Costo final</th>
+          <th className="py-2 pr-4 font-medium">Liquidación</th>
           <th className="py-2 font-medium">Cerrada</th>
         </tr>
       </thead>
@@ -64,6 +90,9 @@ export function PropertyWorkOrdersHistory({ workOrders }: Props) {
             </td>
             <td className="py-2 pr-4">
               {workOrder.final_cost ? formatMoney(workOrder.final_cost) : '—'}
+            </td>
+            <td className="py-2 pr-4 text-sm">
+              <SettlementStatus workOrder={workOrder} />
             </td>
             <td className="py-2 text-muted-foreground">{formatDate(workOrder.closed_at)}</td>
           </tr>
