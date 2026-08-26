@@ -238,17 +238,44 @@ jobs:
           # with_errors (docker-compose.yml: mismo comando bajo el profile
           # "workers"). notification_worker/beat no hacen falta para los 4
           # E2E críticos -- los emails van por outbox y nunca bloquean.
-          # Conocido: adminprop-back#89 -- celery_app.py importa siempre
-          # notification_worker + documents_worker (`include=[...]`), y un
-          # import circular entre notification_worker.py y
-          # administracion/service.py hace crashear CUALQUIER worker
-          # Celery al levantar hoy. tests/e2e/settlements.spec.ts queda en
-          # test.skip() hasta que se resuelva -- este paso corre en
-          # background (&) y no falla el job aunque el worker crashee.
+          # issue #39 -- adminprop-back#89 (resuelto, PR adminprop-back#91)
+          # arregló el import circular entre notification_worker.py y
+          # administracion/service.py que crasheaba cualquier worker Celery
+          # al levantar. tests/e2e/settlements.spec.ts ya no tiene
+          # test.skip(). El worker corre en background (&) porque
+          # `celery worker` no vuelve el control a la shell; la verificación
+          # de que arrancó bien la hace el paso siguiente con `inspect ping`
+          # (si no responde, el job de CI falla acá en vez de recién en el
+          # timeout del polling de Playwright).
           DATABASE_URL=postgresql+psycopg2://adminprop_app:adminprop_app_local_only@localhost:5432/adminprop_e2e \
           REDIS_URL=redis://localhost:6379/0 \
           ENVIRONMENT=test \
           celery -A adminprop.workers.celery_app worker -Q documents --loglevel=info &
+
+      - name: Wait for documents_worker readiness
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: /tmp/adminprop-back
+        run: |
+          if [ ! -f pyproject.toml ]; then
+            exit 0
+          fi
+          # issue #39 -- confirma que el worker respondió al `inspect ping`
+          # de Celery (RPC vía Redis) antes de correr Playwright. Sin esto,
+          # un worker que crashea al boot (ej: import circular como #89)
+          # recién se nota cuando settlements.spec.ts agota el timeout de
+          # polling de 60s -- mucho más lento de diagnosticar en logs de CI.
+          export DATABASE_URL=postgresql+psycopg2://adminprop_app:adminprop_app_local_only@localhost:5432/adminprop_e2e
+          export REDIS_URL=redis://localhost:6379/0
+          export ENVIRONMENT=test
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if celery -A adminprop.workers.celery_app inspect ping --timeout 3 2>/dev/null | grep -q pong; then
+              echo "✓ documents_worker respondió al ping"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "✗ documents_worker no respondió al ping tras 30s"
+          exit 1
 
       - name: Seed E2E data
         if: steps.guard.outputs.skip != 'true'

@@ -18,18 +18,13 @@ test.describe('UC-LIQUIDACIONES — Wizard de generación', () => {
   test('CA-16-06: carga los cargos del mes, corre el wizard de 4 pasos y ve el detalle con line items', async ({
     page,
   }) => {
-    // BLOQUEANTE TIPO C (backend) -- adminprop-back#89: `celery_app.py`
-    // importa incondicionalmente notification_worker + documents_worker
-    // (`include=[...]`), y notification_worker.py <-> administracion/
-    // service.py tienen un import circular (`send_transactional_email`)
-    // que revienta CUALQUIER worker Celery al arrancar -- confirmado
-    // reproducible fuera de Docker también (no es un problema de
-    // Dockerfile). Sin `documents_worker` corriendo, el job de
-    // generación nunca sale de `processing`. Verificado localmente: los
-    // pasos de UI (cargar cargos + los 3 primeros pasos del wizard)
-    // funcionan -- sólo el polling post-generar está bloqueado. Sacar
-    // este skip en cuanto adminprop-back#89 se resuelva.
-    test.skip(true, 'BLOCKED by adminprop-back#89 -- documents_worker no arranca (import circular)')
+    // adminprop-back#89 (resuelto, PR adminprop-back#91) arregló el
+    // import circular entre notification_worker.py y
+    // administracion/service.py que hacía crashear cualquier worker
+    // Celery al arrancar. `documents_worker` corre ahora tanto en Docker
+    // (docker-compose.yml --profile workers) como fuera de Docker (CI),
+    // así que el job de generación llega a completed/with_errors y el
+    // polling post-generar deja de estar bloqueado. Ver issue #39.
     test.setTimeout(90_000)
     await login(page, SEED.owner.email, SEED.owner.password)
 
