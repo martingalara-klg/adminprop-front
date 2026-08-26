@@ -2,8 +2,11 @@
 //
 // RF-03/RF-04/RF-05/RF-07 — CA-04-03/04/05/06/07/10: ficha del período
 // con el flujo estrella del módulo — registrar cobro (con preview de
-// interés sugerido), ver el resultado con sugerido/cobrado/perdonado, y
-// desde ahí descargar el recibo o anular el cobro. Gate por
+// interés sugerido) e historial completo de cobros del período (issue
+// #33, sdd_03 §9 v1.7: `payments[]` en `GET /rent-periods/:id`, anulados
+// incluidos). Descargar recibo y anular ahora se ofrecen por fila del
+// historial para cualquier cobro, no sólo el recién registrado en la
+// sesión (limitación del #12, ver PaymentHistoryRow). Gate por
 // `rent-period:read` + `payment:create`/`payment:void`.
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -11,16 +14,13 @@ import { usePermission } from '@/shared/auth/usePermission'
 import { Spinner, ErrorState, ForbiddenState } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import { formatMoney, formatDate } from '@/shared/utils/format'
-import type { PaymentSummary } from '@/api/payments.api'
-import type { RegisterPaymentInput, VoidPaymentInput } from '../schemas/payment.schema'
+import type { RegisterPaymentInput } from '../schemas/payment.schema'
 
 import { RegisterPaymentForm } from '../components/RegisterPaymentForm'
-import { PaymentResultCard } from '../components/PaymentResultCard'
+import { PaymentHistoryTable } from '../components/PaymentHistoryTable'
 import { useRentPeriodDetail } from '../hooks/useRentPeriodDetail'
 import { useInterestPreview } from '../hooks/useInterestPreview'
 import { useRegisterPayment } from '../hooks/useRegisterPayment'
-import { useVoidPayment } from '../hooks/useVoidPayment'
-import { paymentsApi } from '@/api/payments.api'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -36,11 +36,7 @@ export function RentPeriodDetailPage() {
 
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().slice(0, 10))
   const [registerError, setRegisterError] = useState<unknown>(null)
-  const [lastPayment, setLastPayment] = useState<PaymentSummary | null>(null)
-  const [isPaymentVoided, setIsPaymentVoided] = useState(false)
-  const [voidError, setVoidError] = useState<unknown>(null)
-  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false)
-  const [receiptError, setReceiptError] = useState<string | null>(null)
+  const [registerSuccess, setRegisterSuccess] = useState(false)
 
   const rentPeriodQuery = useRentPeriodDetail(rentPeriodId, canReadRentPeriods)
   const previewQuery = useInterestPreview(
@@ -49,7 +45,6 @@ export function RentPeriodDetailPage() {
     canReadRentPeriods && canRegisterPayment,
   )
   const registerPayment = useRegisterPayment()
-  const voidPayment = useVoidPayment()
 
   if (!canReadRentPeriods) {
     return (
@@ -66,6 +61,7 @@ export function RentPeriodDetailPage() {
   function handleRegisterPayment(values: RegisterPaymentInput) {
     if (!rentPeriodId) return
     setRegisterError(null)
+    setRegisterSuccess(false)
     registerPayment.mutate(
       {
         rentPeriodId,
@@ -81,38 +77,14 @@ export function RentPeriodDetailPage() {
         },
       },
       {
-        onSuccess: (response) => {
-          setLastPayment(response.data)
-          setIsPaymentVoided(false)
-        },
+        // La respuesta autoritativa (sugerido/cobrado/perdonado) queda
+        // visible en la fila nueva del historial de abajo -- la
+        // invalidación de useRegisterPayment ya refresca la query del
+        // detalle (CA "registrar un cobro refresca el historial").
+        onSuccess: () => setRegisterSuccess(true),
         onError: (error) => setRegisterError(error),
       },
     )
-  }
-
-  function handleVoidPayment(values: VoidPaymentInput) {
-    if (!lastPayment) return
-    setVoidError(null)
-    voidPayment.mutate(
-      { paymentId: lastPayment.id, payload: values },
-      {
-        onSuccess: () => setIsPaymentVoided(true),
-        onError: (error) => setVoidError(error),
-      },
-    )
-  }
-
-  async function handleDownloadReceipt() {
-    if (!lastPayment) return
-    setReceiptError(null)
-    setIsDownloadingReceipt(true)
-    try {
-      await paymentsApi.downloadReceipt(lastPayment.id)
-    } catch (error) {
-      setReceiptError(resolveErrorMessage(error))
-    } finally {
-      setIsDownloadingReceipt(false)
-    }
   }
 
   return (
@@ -161,6 +133,11 @@ export function RentPeriodDetailPage() {
             onDateChange={setPaymentDate}
             onSubmit={handleRegisterPayment}
           />
+          {registerSuccess ? (
+            <p className="mt-2 text-sm font-medium text-green-700" role="status">
+              Cobro registrado — ver el historial de cobros abajo.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -170,20 +147,10 @@ export function RentPeriodDetailPage() {
         </p>
       ) : null}
 
-      {lastPayment ? (
-        <section>
-          <PaymentResultCard
-            payment={lastPayment}
-            isVoided={isPaymentVoided}
-            isDownloadingReceipt={isDownloadingReceipt}
-            receiptError={receiptError}
-            isVoiding={voidPayment.isPending}
-            voidError={voidError ? resolveErrorMessage(voidError) : null}
-            onDownloadReceipt={handleDownloadReceipt}
-            onVoid={canVoidPayment ? handleVoidPayment : () => {}}
-          />
-        </section>
-      ) : null}
+      <section>
+        <h2 className="mb-2 text-sm font-medium">Historial de cobros</h2>
+        <PaymentHistoryTable payments={rentPeriod.payments} canVoidPayment={canVoidPayment} />
+      </section>
     </div>
   )
 }

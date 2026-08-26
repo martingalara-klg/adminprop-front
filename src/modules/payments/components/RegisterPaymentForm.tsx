@@ -8,8 +8,8 @@
 // El interés "perdonado" que se muestra acá es sólo una guía visual en
 // vivo (resta simple sugerido - cobrado, ambos strings decimales del
 // backend) — NO se envía al servidor y NO es el valor persistido: el
-// `forgiven_interest` autoritativo vuelve en la respuesta de
-// `registerPayment` (ver PaymentResultCard). Por eso una resta con
+// `forgiven_interest` autoritativo vuelve en la fila del historial de
+// cobros (ver PaymentHistoryRow, issue #33). Por eso una resta con
 // `Number()` acá es aceptable (es sólo indicación en pantalla, mismo
 // criterio de "no replicar lógica de negocio" que adjustmentPreview.ts,
 // pero sin persistir nada ni necesitar precisión de centavos exacta).

@@ -1114,7 +1114,8 @@ export interface paths {
         };
         /**
          * Get Rent Period
-         * @description sdd_03 §9 + RF-02: detalle de un periodo del panel.
+         * @description sdd_03 §9 (v1.7) + RF-02: detalle de un periodo del panel +
+         *     `payments[]` -- issue #87. Cobros anulados incluidos (CA-04-07).
          */
         get: operations["get_rent_period_v1_rent_periods__rent_period_id__get"];
         put?: never;
@@ -3268,8 +3269,9 @@ export interface components {
          * PropertyWorkOrderHistoryEntry
          * @description GET /v1/properties/:id/work-orders -- RF-06: "fecha, descripcion,
          *     estado, pagador, costo final y -- si aplica -- en que liquidacion se
-         *     desconto". `settled_in_settlement_id` siempre `None` hoy: la columna
-         *     todavia no existe (Capa 6, issue #27) -- ver
+         *     desconto". `settled_in_settlement_id` se puebla al liquidarse la
+         *     reparacion agency de la orden (issue #29, Modulo 5) -- `None` solo
+         *     mientras la orden no fue liquidada; ver
          *     `modules/maintenance/settlement_hook.py`.
          */
         PropertyWorkOrderHistoryEntry: {
@@ -3394,6 +3396,75 @@ export interface components {
              */
             status: string;
         };
+        /**
+         * RentPeriodDetail
+         * @description Data de `GET /v1/rent-periods/:id` (v1.7) -- `RentPeriodSummary` +
+         *     `payments[]`: el historial de cobros del periodo, ordenado por
+         *     `payment_date`. Incluye cobros ANULADOS (`voided_at`/`voided_by`
+         *     poblados, via `PaymentDetail`) -- CA-04-07: "el cobro queda visible
+         *     con marca de anulado" pasa a ser verificable por API. El motivo de
+         *     anulacion no viaja aca -- vive en `audit_logs` (issue #23),
+         *     consultable via el visor de auditoria. `GET /v1/rent-periods`
+         *     (panel/listado) no cambia -- sigue devolviendo `RentPeriodSummary`
+         *     sin este campo.
+         */
+        RentPeriodDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Contract Id
+             * Format: uuid
+             */
+            contract_id: string;
+            /**
+             * Property Id
+             * Format: uuid
+             */
+            property_id: string;
+            /**
+             * Landlord Id
+             * Format: uuid
+             */
+            landlord_id: string;
+            /**
+             * Renter Id
+             * Format: uuid
+             */
+            renter_id: string;
+            /**
+             * Period
+             * Format: date
+             */
+            period: string;
+            /** Amount Due */
+            amount_due: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "partial" | "paid";
+            /** Paid Total */
+            paid_total: string;
+            /** Balance */
+            balance: string;
+            /** In Arrears */
+            in_arrears: boolean;
+            /** Days Late */
+            days_late: number;
+            /** Suggested Interest */
+            suggested_interest: string;
+            /** Payments */
+            payments: components["schemas"]["PaymentDetail"][];
+        };
+        /** RentPeriodDetailResponse */
+        RentPeriodDetailResponse: {
+            data: components["schemas"]["RentPeriodDetail"];
+        };
         /** RentPeriodListResponse */
         RentPeriodListResponse: {
             /** Data */
@@ -3402,10 +3473,6 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
-        };
-        /** RentPeriodResponse */
-        RentPeriodResponse: {
-            data: components["schemas"]["RentPeriodSummary"];
         };
         /**
          * RentPeriodSummary
@@ -6207,7 +6274,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RentPeriodResponse"];
+                    "application/json": components["schemas"]["RentPeriodDetailResponse"];
                 };
             };
             /** @description Validation Error */

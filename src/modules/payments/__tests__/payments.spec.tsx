@@ -1,14 +1,18 @@
 // src/modules/payments/__tests__/payments.spec.tsx
 //
-// SDD: spec_module_04_cobranzas.md RF-02..RF-08 + sdd_03 §9 (v1.6).
+// SDD: spec_module_04_cobranzas.md RF-02..RF-08 + sdd_03 §9 (v1.7).
 // Issue #12 — CA-04-03..12 (lado UI; CA-04-01/02 son del job de
-// generación mensual, sin superficie de UI).
+// generación mensual, sin superficie de UI). Issue #33 — CA-33-01..05:
+// historial de cobros del período (`payments[]`, incluye anulados) con
+// recibo/anulación por fila.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
 import { AdminPropApiError } from '@/api/errors'
+import type { PaymentDetail } from '@/api/payments.api'
+import { formatDate } from '@/shared/utils/format'
 import { renderPaymentsApp } from './test-router'
 
 vi.mock('@/api/payments.api', () => ({
@@ -124,6 +128,27 @@ const RENT_PERIOD_PENDING = {
   in_arrears: true,
   days_late: 5,
   suggested_interest: '500.00',
+  payments: [] as PaymentDetail[],
+}
+
+const PAYMENT_FIXTURE: PaymentDetail = {
+  id: 'pay-1',
+  rent_period_id: 'rp-1',
+  payment_date: '2026-07-15',
+  method: 'cash',
+  payment_currency: 'ARS',
+  amount: '100000.00',
+  exchange_rate: null,
+  destination: 'agency_account',
+  suggested_interest: '500.00',
+  charged_interest: '500.00',
+  forgiven_interest: '0.00',
+  days_late: 5,
+  notes: null,
+  created_by: 'u-owner',
+  created_at: '2026-07-15T00:00:00Z',
+  voided_at: null,
+  voided_by: null,
 }
 
 function mockOptionDefaults() {
@@ -209,7 +234,14 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
 
   it('CA-04-05: el form muestra el interés sugerido y permite perdón parcial imputando un valor menor', async () => {
     setSession(OWNER_SESSION)
-    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({ data: RENT_PERIOD_PENDING })
+    vi.mocked(paymentsApi.getRentPeriod)
+      .mockResolvedValueOnce({ data: RENT_PERIOD_PENDING }) // carga inicial: sin cobros
+      .mockResolvedValueOnce({
+        data: {
+          ...RENT_PERIOD_PENDING,
+          payments: [{ ...PAYMENT_FIXTURE, charged_interest: '200.00', forgiven_interest: '300.00' }],
+        },
+      }) // refetch tras invalidar (CA-33-05: registrar refresca el historial)
     vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
       rent_period_id: 'rp-1',
       payment_date: '2026-07-15',
@@ -218,23 +250,7 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
       suggested_interest: '500.00',
     })
     vi.mocked(paymentsApi.registerPayment).mockResolvedValueOnce({
-      data: {
-        id: 'pay-1',
-        rent_period_id: 'rp-1',
-        payment_date: '2026-07-15',
-        method: 'cash',
-        payment_currency: 'ARS',
-        amount: '100000.00',
-        exchange_rate: null,
-        destination: 'agency_account',
-        suggested_interest: '500.00',
-        charged_interest: '200.00',
-        forgiven_interest: '300.00',
-        days_late: 5,
-        notes: null,
-        created_by: 'u-owner',
-        created_at: '2026-07-15T00:00:00Z',
-      },
+      data: { ...PAYMENT_FIXTURE, charged_interest: '200.00', forgiven_interest: '300.00' },
     })
 
     renderPaymentsApp('/payments/rp-1')
@@ -254,10 +270,10 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
       )
     })
 
-    const result = await screen.findByTestId('payment-result')
-    expect(result).toHaveTextContent('500,00') // sugerido
-    expect(result).toHaveTextContent('200,00') // cobrado
-    expect(result).toHaveTextContent('300,00') // perdonado
+    const row = await screen.findByTestId('payment-history-row')
+    expect(row).toHaveTextContent('500,00') // sugerido
+    expect(row).toHaveTextContent('200,00') // cobrado
+    expect(row).toHaveTextContent('300,00') // perdonado
   })
 
   it('CA-04-04: el saldo excedido devuelve 422 PAYMENT_EXCEEDS_CONTRACT_BALANCE', async () => {
@@ -293,9 +309,25 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     })
   })
 
-  it('CA-04-10: se puede descargar el recibo de un cobro recién registrado', async () => {
+  it('CA-33-01: el historial muestra fecha, medio, moneda, importe, TC, destino, los tres intereses y notas', async () => {
     setSession(OWNER_SESSION)
-    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({ data: RENT_PERIOD_PENDING })
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: {
+        ...RENT_PERIOD_PENDING,
+        payments: [
+          {
+            ...PAYMENT_FIXTURE,
+            id: 'pay-usd',
+            method: 'transfer',
+            payment_currency: 'USD',
+            amount: '100.00',
+            exchange_rate: '1000.0000',
+            destination: 'landlord_account',
+            notes: 'Pago parcial en USD',
+          },
+        ],
+      },
+    })
     vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
       rent_period_id: 'rp-1',
       payment_date: '2026-07-15',
@@ -303,36 +335,81 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
       days_late: 5,
       suggested_interest: '500.00',
     })
-    vi.mocked(paymentsApi.registerPayment).mockResolvedValueOnce({
+
+    renderPaymentsApp('/payments/rp-1')
+
+    const row = await screen.findByTestId('payment-history-row')
+    expect(row).toHaveTextContent(formatDate('2026-07-15'))
+    expect(row).toHaveTextContent('Transferencia')
+    expect(row).toHaveTextContent('USD')
+    expect(row).toHaveTextContent('100,00')
+    expect(row).toHaveTextContent('1000.0000')
+    expect(row).toHaveTextContent('Directo al propietario (ya rendido)')
+    expect(row).toHaveTextContent('500,00') // sugerido
+    expect(row).toHaveTextContent('Pago parcial en USD')
+  })
+
+  it('CA-33-02: un cobro anulado se muestra con marca clara y sin acciones por fila', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
       data: {
-        id: 'pay-1',
-        rent_period_id: 'rp-1',
-        payment_date: '2026-07-15',
-        method: 'cash',
-        payment_currency: 'ARS',
-        amount: '100000.00',
-        exchange_rate: null,
-        destination: 'agency_account',
-        suggested_interest: '500.00',
-        charged_interest: '500.00',
-        forgiven_interest: '0.00',
-        days_late: 5,
-        notes: null,
-        created_by: 'u-owner',
-        created_at: '2026-07-15T00:00:00Z',
+        ...RENT_PERIOD_PENDING,
+        payments: [
+          { ...PAYMENT_FIXTURE, id: 'pay-active' },
+          {
+            ...PAYMENT_FIXTURE,
+            id: 'pay-voided',
+            voided_at: '2026-07-16T00:00:00Z',
+            voided_by: 'u-owner',
+          },
+        ],
       },
+    })
+    vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
+      rent_period_id: 'rp-1',
+      payment_date: '2026-07-15',
+      balance: '100000.00',
+      days_late: 5,
+      suggested_interest: '500.00',
+    })
+
+    renderPaymentsApp('/payments/rp-1')
+
+    const rows = await screen.findAllByTestId('payment-history-row')
+    expect(rows).toHaveLength(2)
+
+    const activeRow = rows[0]!
+    const voidedRow = rows[1]!
+    expect(activeRow).toHaveAttribute('data-voided', 'false')
+    expect(within(activeRow).getByRole('button', { name: 'Descargar recibo' })).toBeInTheDocument()
+    expect(within(activeRow).getByRole('button', { name: 'Anular cobro' })).toBeInTheDocument()
+
+    expect(voidedRow).toHaveAttribute('data-voided', 'true')
+    expect(within(voidedRow).getByText('Anulado')).toBeInTheDocument()
+    expect(
+      within(voidedRow).queryByRole('button', { name: 'Descargar recibo' }),
+    ).not.toBeInTheDocument()
+    expect(within(voidedRow).queryByRole('button', { name: 'Anular cobro' })).not.toBeInTheDocument()
+  })
+
+  it('CA-33-03: se puede descargar el recibo de un cobro activo desde su fila del historial', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: { ...RENT_PERIOD_PENDING, payments: [PAYMENT_FIXTURE] },
+    })
+    vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
+      rent_period_id: 'rp-1',
+      payment_date: '2026-07-15',
+      balance: '100000.00',
+      days_late: 5,
+      suggested_interest: '500.00',
     })
     vi.mocked(paymentsApi.downloadReceipt).mockResolvedValueOnce(undefined)
 
     renderPaymentsApp('/payments/rp-1')
     const user = userEvent.setup()
 
-    await screen.findByRole('button', { name: 'Registrar cobro' })
-    await user.type(screen.getByLabelText('Importe a capital (ARS)'), '100000')
-    await user.type(screen.getByLabelText('Interés cobrado'), '500')
-    await user.click(screen.getByRole('button', { name: 'Registrar cobro' }))
-
-    await screen.findByTestId('payment-result')
+    await screen.findByTestId('payment-history-row')
     await user.click(screen.getByRole('button', { name: 'Descargar recibo' }))
 
     await waitFor(() => {
@@ -340,34 +417,17 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     })
   })
 
-  it('CA-04-10: un recibo sobre un cobro anulado muestra 422 BUSINESS_RULE_VIOLATION', async () => {
+  it('CA-33-03: un error al descargar el recibo (422 BUSINESS_RULE_VIOLATION) se muestra inline en la fila', async () => {
     setSession(OWNER_SESSION)
-    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({ data: RENT_PERIOD_PENDING })
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: { ...RENT_PERIOD_PENDING, payments: [PAYMENT_FIXTURE] },
+    })
     vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
       rent_period_id: 'rp-1',
       payment_date: '2026-07-15',
       balance: '100000.00',
       days_late: 5,
       suggested_interest: '500.00',
-    })
-    vi.mocked(paymentsApi.registerPayment).mockResolvedValueOnce({
-      data: {
-        id: 'pay-1',
-        rent_period_id: 'rp-1',
-        payment_date: '2026-07-15',
-        method: 'cash',
-        payment_currency: 'ARS',
-        amount: '100000.00',
-        exchange_rate: null,
-        destination: 'agency_account',
-        suggested_interest: '500.00',
-        charged_interest: '500.00',
-        forgiven_interest: '0.00',
-        days_late: 5,
-        notes: null,
-        created_by: 'u-owner',
-        created_at: '2026-07-15T00:00:00Z',
-      },
     })
     vi.mocked(paymentsApi.downloadReceipt).mockRejectedValueOnce(
       new AdminPropApiError('BUSINESS_RULE_VIOLATION', 422, 'La operación viola una regla de negocio.'),
@@ -376,12 +436,7 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     renderPaymentsApp('/payments/rp-1')
     const user = userEvent.setup()
 
-    await screen.findByRole('button', { name: 'Registrar cobro' })
-    await user.type(screen.getByLabelText('Importe a capital (ARS)'), '100000')
-    await user.type(screen.getByLabelText('Interés cobrado'), '500')
-    await user.click(screen.getByRole('button', { name: 'Registrar cobro' }))
-
-    await screen.findByTestId('payment-result')
+    await screen.findByTestId('payment-history-row')
     await user.click(screen.getByRole('button', { name: 'Descargar recibo' }))
 
     await waitFor(() => {
@@ -389,9 +444,16 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     })
   })
 
-  it('CA-04-07: el owner anula un cobro con motivo obligatorio en dos pasos', async () => {
+  it('CA-33-04: el owner anula un cobro desde su fila del historial con motivo obligatorio en dos pasos', async () => {
     setSession(OWNER_SESSION)
-    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({ data: RENT_PERIOD_PENDING })
+    vi.mocked(paymentsApi.getRentPeriod)
+      .mockResolvedValueOnce({ data: { ...RENT_PERIOD_PENDING, payments: [PAYMENT_FIXTURE] } })
+      .mockResolvedValueOnce({
+        data: {
+          ...RENT_PERIOD_PENDING,
+          payments: [{ ...PAYMENT_FIXTURE, voided_at: '2026-07-16T00:00:00Z', voided_by: 'u-owner' }],
+        },
+      })
     vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
       rent_period_id: 'rp-1',
       payment_date: '2026-07-15',
@@ -399,41 +461,14 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
       days_late: 5,
       suggested_interest: '500.00',
     })
-    const PAYMENT = {
-      id: 'pay-1',
-      rent_period_id: 'rp-1',
-      payment_date: '2026-07-15',
-      method: 'cash',
-      payment_currency: 'ARS',
-      amount: '100000.00',
-      exchange_rate: null,
-      destination: 'agency_account',
-      suggested_interest: '500.00',
-      charged_interest: '500.00',
-      forgiven_interest: '0.00',
-      days_late: 5,
-      notes: null,
-      created_by: 'u-owner',
-      created_at: '2026-07-15T00:00:00Z',
-    }
-    vi.mocked(paymentsApi.registerPayment).mockResolvedValueOnce({ data: PAYMENT })
     vi.mocked(paymentsApi.voidPayment).mockResolvedValueOnce({
-      data: {
-        ...PAYMENT,
-        voided_at: '2026-07-16T00:00:00Z',
-        voided_by: 'u-owner',
-      },
+      data: { ...PAYMENT_FIXTURE, voided_at: '2026-07-16T00:00:00Z', voided_by: 'u-owner' },
     })
 
     renderPaymentsApp('/payments/rp-1')
     const user = userEvent.setup()
 
-    await screen.findByRole('button', { name: 'Registrar cobro' })
-    await user.type(screen.getByLabelText('Importe a capital (ARS)'), '100000')
-    await user.type(screen.getByLabelText('Interés cobrado'), '500')
-    await user.click(screen.getByRole('button', { name: 'Registrar cobro' }))
-
-    await screen.findByTestId('payment-result')
+    await screen.findByTestId('payment-history-row')
     await user.click(screen.getByRole('button', { name: 'Anular cobro' }))
     await user.type(screen.getByLabelText('Motivo'), 'Cobro cargado por error')
     await user.click(screen.getByRole('button', { name: 'Confirmar anulación' }))
@@ -443,37 +478,20 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
         reason: 'Cobro cargado por error',
       })
     })
-    expect(await screen.findByText('Cobro anulado')).toBeInTheDocument()
+    expect(await screen.findByText('Anulado')).toBeInTheDocument()
   })
 
-  it('CA-04-07: anular un cobro ya anulado muestra 409 PAYMENT_ALREADY_VOIDED', async () => {
+  it('CA-33-04: anular un cobro ya anulado muestra 409 PAYMENT_ALREADY_VOIDED inline en la fila', async () => {
     setSession(OWNER_SESSION)
-    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({ data: RENT_PERIOD_PENDING })
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: { ...RENT_PERIOD_PENDING, payments: [PAYMENT_FIXTURE] },
+    })
     vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
       rent_period_id: 'rp-1',
       payment_date: '2026-07-15',
       balance: '100000.00',
       days_late: 5,
       suggested_interest: '500.00',
-    })
-    vi.mocked(paymentsApi.registerPayment).mockResolvedValueOnce({
-      data: {
-        id: 'pay-1',
-        rent_period_id: 'rp-1',
-        payment_date: '2026-07-15',
-        method: 'cash',
-        payment_currency: 'ARS',
-        amount: '100000.00',
-        exchange_rate: null,
-        destination: 'agency_account',
-        suggested_interest: '500.00',
-        charged_interest: '500.00',
-        forgiven_interest: '0.00',
-        days_late: 5,
-        notes: null,
-        created_by: 'u-owner',
-        created_at: '2026-07-15T00:00:00Z',
-      },
     })
     vi.mocked(paymentsApi.voidPayment).mockRejectedValueOnce(
       new AdminPropApiError('PAYMENT_ALREADY_VOIDED', 409, 'El cobro ya fue anulado.'),
@@ -482,12 +500,7 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     renderPaymentsApp('/payments/rp-1')
     const user = userEvent.setup()
 
-    await screen.findByRole('button', { name: 'Registrar cobro' })
-    await user.type(screen.getByLabelText('Importe a capital (ARS)'), '100000')
-    await user.type(screen.getByLabelText('Interés cobrado'), '500')
-    await user.click(screen.getByRole('button', { name: 'Registrar cobro' }))
-
-    await screen.findByTestId('payment-result')
+    await screen.findByTestId('payment-history-row')
     await user.click(screen.getByRole('button', { name: 'Anular cobro' }))
     await user.type(screen.getByLabelText('Motivo'), 'Duplicado')
     await user.click(screen.getByRole('button', { name: 'Confirmar anulación' }))
@@ -495,6 +508,36 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     await waitFor(() => {
       expect(screen.getByText('El cobro ya fue anulado.')).toBeInTheDocument()
     })
+  })
+
+  it('CA-33-05: registrar un cobro nuevo refresca el historial del período', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(paymentsApi.getRentPeriod)
+      .mockResolvedValueOnce({ data: RENT_PERIOD_PENDING }) // carga inicial: sin cobros
+      .mockResolvedValueOnce({ data: { ...RENT_PERIOD_PENDING, payments: [PAYMENT_FIXTURE] } })
+    vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
+      rent_period_id: 'rp-1',
+      payment_date: '2026-07-15',
+      balance: '100000.00',
+      days_late: 5,
+      suggested_interest: '500.00',
+    })
+    vi.mocked(paymentsApi.registerPayment).mockResolvedValueOnce({ data: PAYMENT_FIXTURE })
+
+    renderPaymentsApp('/payments/rp-1')
+    const user = userEvent.setup()
+
+    await screen.findByRole('button', { name: 'Registrar cobro' })
+    expect(screen.queryByTestId('payment-history-row')).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Importe a capital (ARS)'), '100000')
+    await user.type(screen.getByLabelText('Interés cobrado'), '500')
+    await user.click(screen.getByRole('button', { name: 'Registrar cobro' }))
+
+    await waitFor(() => {
+      expect(paymentsApi.getRentPeriod).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByTestId('payment-history-row')).toBeInTheDocument()
   })
 
   it('CA-04-09: la vista global de deuda muestra períodos adeudados, saldo, mora e interés sugerido, filtrable por antigüedad', async () => {
