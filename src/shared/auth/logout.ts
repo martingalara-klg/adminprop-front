@@ -6,6 +6,7 @@
 import { queryClient } from '@/shared/queryClient'
 import { authApi } from '@/api/auth.api'
 import { useSessionStore } from './session-store'
+import { useSettlementWizard } from '@/modules/settlements/settlement-wizard/state'
 
 /**
  * @param reason mensaje es-AR opcional a mostrar tras el logout (ej: el
@@ -22,4 +23,5 @@ export async function logout(reason?: string): Promise<void> {
 
   queryClient.clear()
   useSessionStore.getState().clearSession(reason)
+  useSettlementWizard.getState().reset()
 }
