@@ -113,13 +113,78 @@ npm run dev
 # Unit + integration (Vitest)
 npm test
 
-# E2E (Playwright)
+# E2E (Playwright) -- ver §2.7.1, requiere el backend + worker + seed
 npm run e2e
 
 # Lint + typecheck
 npm run lint
 npm run typecheck
 ```
+
+#### 2.7.1 E2E (Playwright) — issue #16
+
+Los 4 E2E críticos (`tests/e2e/login.spec.ts`, `contracts.spec.ts`,
+`payments.spec.ts`, `settlements.spec.ts`) corren contra un backend real
+(sin mocks) — necesitan **Postgres + Redis + API + `documents_worker`**
+levantados y datos sembrados. Tres pozos conocidos, ya resueltos acá:
+
+1. **Sesión real, sin bypass**: el login usa cookies HttpOnly reales del
+   backend (`src/api/http-client.ts`, `withCredentials: true`). El
+   backend no tiene middleware CORS — `vite.config.ts` define un proxy
+   (`server.proxy`/`preview.proxy`: `/v1` → `http://localhost:8000`) para
+   que el browser vea todo como same-origin. Con esto, `npm run dev`
+   (VITE_API_BASE_URL absoluto de `.env.local`) sigue funcionando igual
+   que antes; para E2E, usar `VITE_API_BASE_URL=/v1` (relativo) al
+   buildear/previsualizar (ver paso 3 abajo).
+2. **`documents_worker` (Celery)**: sin él, el wizard de liquidación se
+   queda en `processing` para siempre. Levantarlo con
+   `adminprop-back`: `make up-workers` (o `docker compose -f
+   docker/docker-compose.yml --profile workers up`) — trae también
+   `notification_worker`/`beat`, que no hacen falta para estos E2E pero
+   no molestan.
+3. **Datos sembrados directo a la DB**: la activación de cuentas reales
+   pasa por invitación por email (inviable en E2E/CI). `tests/e2e/seed/seed.py`
+   siembra directo a Postgres (organización activa, usuarios owner/admin
+   con password conocida — bcrypt cost 12 —, roles/permisos idénticos a
+   `provisioning.py`, y los fixtures de propiedad/persona/contrato/
+   rent_period/concepto recurrente que cada spec necesita). Es
+   **idempotente**: correrlo varias veces sobre la misma base no duplica
+   filas ni rompe. Credenciales sembradas: ver
+   `tests/e2e/support/seed-data.ts`.
+
+Pasos, con `adminprop-back` corriendo en local (`make up && make up-workers && make migrate`):
+
+```bash
+# 1. Backend + workers arriba (desde adminprop-back)
+cd ../adminprop-back
+make up
+make up-workers
+make migrate
+
+# 2. Sembrar datos E2E (desde adminprop-front) -- requiere bcrypt +
+#    psycopg2-binary en el Python que uses (ya están en el venv de
+#    adminprop-back si lo tenés instalado: `cd ../adminprop-back &&
+#    .venv/Scripts/python -m pip show bcrypt psycopg2-binary`; si no,
+#    `pip install bcrypt psycopg2-binary` standalone alcanza).
+cd ../adminprop-front
+npm run e2e:seed
+# equivalente: SEED_DATABASE_URL=postgresql://adminprop:adminprop@localhost:5432/adminprop python tests/e2e/seed/seed.py
+
+# 3. Build + preview con API relativa (mismo origen vía el proxy de vite.config.ts)
+VITE_API_BASE_URL=/v1 npm run build
+npm run preview -- --port 5173 &
+
+# 4. Correr los E2E
+PLAYWRIGHT_BASE_URL=http://localhost:5173 npm run e2e
+
+# 5. Bajar el preview cuando termines
+kill %1
+```
+
+CI (`.github/workflows/ci.yml`, job `e2e-tests`) hace lo mismo de forma
+automática en cada PR: clona `adminprop-back`, migra, levanta la API +
+`documents_worker`, siembra, buildea con `VITE_API_BASE_URL=/v1` y corre
+Playwright contra el preview.
 
 ---
 

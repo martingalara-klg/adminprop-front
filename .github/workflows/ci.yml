@@ -166,6 +166,19 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install WeasyPrint system deps for workers
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          # issue #16 -- documents_worker importa transitivamente weasyprint
+          # (settlements.exports -> shared/pdf/renderer.py) igual que la API;
+          # docker/Dockerfile.api ya instala estas libs pero el runner de CI
+          # no usa esa imagen (corre uvicorn/celery pip-instalado directo).
+          # Mismo listado que Dockerfile.api (issue #24, adminprop-back).
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y -qq \
+            libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+            libffi-dev shared-mime-info
+
       - name: Start backend for E2E
         if: steps.guard.outputs.skip != 'true'
         working-directory: /tmp/adminprop-back
@@ -179,27 +192,85 @@ jobs:
           mkdir -p keys
           openssl genrsa -out keys/private.pem 2048
           openssl rsa -in keys/private.pem -pubout -out keys/public.pem
+          # MIGRATIONS_DATABASE_URL corre como superusuario (adminprop) --
+          # la propia migracion 20260812_114322_setup_extensions_and_roles.py
+          # crea los roles `adminprop_app`/`adminprop_superadmin` con la
+          # password default de Settings.app_role_password/superadmin_role_password
+          # ("...local_only") porque acá no se pasa APP_ROLE_PASSWORD/
+          # SUPERADMIN_ROLE_PASSWORD -- el runtime de abajo usa esos mismos
+          # defaults para loguear como adminprop_app.
           MIGRATIONS_DATABASE_URL=postgresql+psycopg2://adminprop:adminprop@localhost:5432/adminprop_e2e alembic upgrade head
-          DATABASE_URL=postgresql+psycopg2://adminprop:adminprop@localhost:5432/adminprop_e2e \
+          # issue #16 -- variables corregidas para matchear los nombres de
+          # campo reales de adminprop.config.Settings (antes: APP_ENV,
+          # SECRET_KEY y CORS_ORIGINS no correspondían a ningún campo --
+          # pydantic-settings los ignoraba en silencio, extra="ignore").
+          # DATABASE_URL usa el rol `adminprop_app` (RLS FORCE), NUNCA el
+          # superusuario -- correr el runtime como `adminprop` bypassearía
+          # RLS (decision #42, sdd_04 §2.3) y el E2E no probaría el
+          # aislamiento multi-tenant real. No existe CORS_ORIGINS en
+          # Settings (adminprop-back no tiene middleware CORS -- ver
+          # vite.config.ts, que resuelve esto con un proxy en vez de pedir
+          # un cambio de backend).
+          DATABASE_URL=postgresql+psycopg2://adminprop_app:adminprop_app_local_only@localhost:5432/adminprop_e2e \
           REDIS_URL=redis://localhost:6379/0 \
-          APP_ENV=test \
-          SECRET_KEY=e2e-secret \
+          ENVIRONMENT=test \
           JWT_PRIVATE_KEY_PATH=keys/private.pem \
           JWT_PUBLIC_KEY_PATH=keys/public.pem \
-          CORS_ORIGINS=http://localhost:5173 \
           RESEND_API_KEY=re_fake-for-tests \
           uvicorn adminprop.main:app --host 0.0.0.0 --port 8000 &
-          # Wait for backend to be ready
+          # Wait for backend to be ready -- único endpoint de health real
+          # (RUNBOOK-LOCAL-001-backend.md §2.7: "GET /health", no
+          # "/health/liveness" -- ese path no existe en este proyecto).
           for i in 1 2 3 4 5 6 7 8 9 10; do
-            curl -s http://localhost:8000/health/liveness && break
+            curl -sf http://localhost:8000/health && break
             sleep 3
           done
+
+      - name: Start documents_worker for E2E
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: /tmp/adminprop-back
+        run: |
+          if [ ! -f pyproject.toml ]; then
+            exit 0
+          fi
+          # issue #16 -- el wizard de liquidación necesita este worker para
+          # que el job de generación pase de processing a completed/
+          # with_errors (docker-compose.yml: mismo comando bajo el profile
+          # "workers"). notification_worker/beat no hacen falta para los 4
+          # E2E críticos -- los emails van por outbox y nunca bloquean.
+          # Conocido: adminprop-back#89 -- celery_app.py importa siempre
+          # notification_worker + documents_worker (`include=[...]`), y un
+          # import circular entre notification_worker.py y
+          # administracion/service.py hace crashear CUALQUIER worker
+          # Celery al levantar hoy. tests/e2e/settlements.spec.ts queda en
+          # test.skip() hasta que se resuelva -- este paso corre en
+          # background (&) y no falla el job aunque el worker crashee.
+          DATABASE_URL=postgresql+psycopg2://adminprop_app:adminprop_app_local_only@localhost:5432/adminprop_e2e \
+          REDIS_URL=redis://localhost:6379/0 \
+          ENVIRONMENT=test \
+          celery -A adminprop.workers.celery_app worker -Q documents --loglevel=info &
+
+      - name: Seed E2E data
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          if [ ! -f /tmp/adminprop-back/pyproject.toml ]; then
+            exit 0
+          fi
+          # bcrypt/psycopg2-binary ya están instalados por el paso "Start
+          # backend for E2E" (pip install -e ".[dev]" de adminprop-back,
+          # mismo runner/Python, sin venv aislado por step).
+          SEED_DATABASE_URL=postgresql://adminprop:adminprop@localhost:5432/adminprop_e2e \
+          python tests/e2e/seed/seed.py
 
       - name: Build frontend for E2E
         if: steps.guard.outputs.skip != 'true'
         run: npm run build
         env:
-          VITE_API_BASE_URL: http://localhost:8000/v1
+          # issue #16 -- relativo, no absoluto: adminprop-back no tiene
+          # CORS (ver vite.config.ts). `vite preview` (paso de abajo)
+          # proxea /v1/* al backend real -- el bundle debe pegarle a ese
+          # mismo origen, no a http://localhost:8000 directo.
+          VITE_API_BASE_URL: /v1
           VITE_APP_DOMAIN: localhost:5173
           VITE_DEFAULT_LOCALE: es-AR
           VITE_SUPPORTED_LOCALES: es-AR,en-US

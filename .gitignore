@@ -27,3 +27,7 @@ dist-ssr
 coverage
 playwright-report
 test-results
+
+# Python (tests/e2e/seed/seed.py — issue #16)
+__pycache__/
+*.pyc
