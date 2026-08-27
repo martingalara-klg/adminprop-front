@@ -1,7 +1,9 @@
 // src/modules/contracts/__tests__/contracts.spec.tsx
 //
-// SDD: spec_module_03_contratos.md RF-01..RF-05 + sdd_03 §8 (v1.6).
+// SDD: spec_module_03_contratos.md RF-01..RF-05 + sdd_03 §8 (v1.9).
 // Issue #11 — CA-03-01..08 (lado UI).
+// Issue #50 (espejo de back#100, RN-08/RN-C06) — CA-03-09..15: alta de
+// contrato en curso (monto vigente + desde cuándo rige).
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -179,6 +181,11 @@ describe('Módulo 3 — Contratos (#11)', () => {
         adjustment_index: 'icl',
       }),
     )
+    // CA-03-12 (issue #100): alta normal — sin current_amount/
+    // current_amount_since, idéntico al comportamiento previo al #100.
+    const createPayload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
+    expect(createPayload?.current_amount).toBeUndefined()
+    expect(createPayload?.current_amount_since).toBeUndefined()
 
     await waitFor(() => {
       expect(screen.getByText('Borrador')).toBeInTheDocument()
@@ -522,5 +529,263 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(screen.getByText('Acceso restringido')).toBeInTheDocument()
     })
     expect(contractsApi.list).not.toHaveBeenCalled()
+  })
+
+  // Issue #50 (espejo de back#100, RN-08/RN-C06) ────────────────────────
+  describe('UC — alta de contrato en curso', () => {
+    it('CA-03-09/13: el toggle "en curso" despliega monto vigente + desde cuándo rige', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+
+      expect(screen.queryByLabelText('Monto vigente hoy')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Desde cuándo rige')).not.toBeInTheDocument()
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+
+      expect(screen.getByLabelText('Monto vigente hoy')).toBeInTheDocument()
+      expect(screen.getByLabelText('Desde cuándo rige')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'El mes actual nace con este monto vigente; el próximo aumento por índice se cuenta desde esta fecha, no desde el inicio del contrato.',
+        ),
+      ).toBeInTheDocument()
+    })
+
+    it('CA-03-09/13: alta retroactiva envía current_amount + current_amount_since normalizado al día 1', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list)
+        .mockResolvedValueOnce({ data: [], meta: {} })
+        .mockResolvedValueOnce({ data: [DRAFT_CONTRACT_ARS], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({ data: DRAFT_CONTRACT_ARS })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
+      await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-03')
+
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(contractsApi.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            current_amount: '130000',
+            current_amount_since: '2026-03-01',
+          }),
+        )
+      })
+    })
+
+    it('CA-03-13: un contrato USD también acepta el alta en curso', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({
+        data: { ...DRAFT_CONTRACT_ARS, currency: 'USD' },
+      })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Moneda'), 'USD')
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '1000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(screen.getByLabelText('Monto vigente hoy'), '1200')
+      await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-03')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(contractsApi.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            currency: 'USD',
+            current_amount: '1200',
+            current_amount_since: '2026-03-01',
+          }),
+        )
+      })
+    })
+
+    it('CA-03-15: enviar sólo uno de los dos campos muestra el error inline y no dispara el submit', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
+      // "Desde cuándo rige" queda vacío a propósito.
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Ingresá desde cuándo rige el monto vigente.'),
+        ).toBeInTheDocument()
+      })
+      expect(contractsApi.create).not.toHaveBeenCalled()
+    })
+
+    it('CA-03-14: una fecha anterior al inicio del contrato muestra el error inline', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-06-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
+      await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-01')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Debe ser posterior o igual a la fecha de inicio del contrato.'),
+        ).toBeInTheDocument()
+      })
+      expect(contractsApi.create).not.toHaveBeenCalled()
+    })
+
+    it('CA-03-14: una fecha posterior a hoy muestra el error inline', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2030-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
+      const futureMonth = `${new Date().getFullYear() + 5}-01`
+      await user.type(screen.getByLabelText('Desde cuándo rige'), futureMonth)
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('No puede ser posterior a hoy.')).toBeInTheDocument()
+      })
+      expect(contractsApi.create).not.toHaveBeenCalled()
+    })
+
+    it('INVALID_DATE_RANGE del backend se muestra como error inline en el campo', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockRejectedValueOnce(
+        new AdminPropApiError(
+          'INVALID_DATE_RANGE',
+          400,
+          'El rango de fechas ingresado no es válido.',
+          'current_amount_since',
+        ),
+      )
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
+      await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-03')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText('El rango de fechas ingresado no es válido.').length,
+        ).toBeGreaterThan(0)
+      })
+    })
+
+    it('CA-03-11: el historial distingue la "Carga inicial" de un ajuste % común', async () => {
+      setSession(OWNER_SESSION)
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({
+        data: [
+          {
+            id: 'adj-initial',
+            contract_id: 'c-1',
+            due_period: '2026-03-01',
+            status: 'applied',
+            pct_applied: null,
+            previous_amount: '100000.00',
+            new_amount: '130000.00',
+            notes: 'Carga inicial: alta de contrato en curso',
+            applied_by: 'owner@inmobiliaria-sur.com',
+            applied_at: '2026-01-01T00:00:00Z',
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts/c-1')
+
+      await waitFor(() => screen.getByTestId('contract-adjustments-history'))
+      expect(screen.getByText('Carga inicial')).toBeInTheDocument()
+      expect(screen.getByTestId('initial-load-badge-adj-initial')).toBeInTheDocument()
+      expect(screen.queryByText('null%')).not.toBeInTheDocument()
+    })
   })
 })
