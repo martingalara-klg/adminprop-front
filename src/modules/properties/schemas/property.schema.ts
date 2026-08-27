@@ -43,24 +43,32 @@ const addressField = z
 
 const landlordIdField = z.string().min(1, 'Seleccioná un propietario.')
 
+// issue #99 (back) / #49 (front): barrio obligatorio en alta/edición —
+// decisión del PO, propiedades nuevas siempre llevan barrio (aunque la
+// columna sea nullable en DB por datos legacy).
+const neighborhoodIdField = z.string().min(1, 'Seleccioná un barrio.')
+
 const propertyTypeField = z.string().max(50, 'El tipo no puede superar los 50 caracteres.')
 
 const notesField = z.string().optional().or(z.literal(''))
 
 // RF-01 + CA-01-01: alta con dirección (obligatoria), propietario
-// (obligatorio) y tipo.
+// (obligatorio) y tipo. CA-01-08 (issue #99/#49): barrio obligatorio.
 export const createPropertySchema = z.object({
   address: addressField,
   landlord_id: landlordIdField,
+  neighborhood_id: neighborhoodIdField,
   property_type: propertyTypeField,
   notes: notesField,
 })
 export type CreatePropertyInput = z.infer<typeof createPropertySchema>
 
 // RF-01: edición de todos los campos salvo `status="rented"` (derivado).
+// CA-01-08: barrio obligatorio también en edición.
 export const updatePropertySchema = z.object({
   address: addressField,
   landlord_id: landlordIdField,
+  neighborhood_id: neighborhoodIdField,
   property_type: propertyTypeField,
   status: z.enum(MANUAL_PROPERTY_STATUS_OPTIONS),
   notes: notesField,
