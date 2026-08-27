@@ -19,12 +19,17 @@ export function LoginPage() {
   // issue #21: mensaje es-AR de un logout forzado (ej: MEMBERSHIP_INACTIVE
   // detectado al rehidratar via GET /auth/me) -- efímero, no persistido.
   const logoutReason = useSessionStore((s) => s.logoutReason)
+  // issue #45: única fuente de verdad para decidir el destino -- el mismo
+  // `session.isSuperAdmin` que ya usa `RequireSuperAdmin` (rehidratado por
+  // `/auth/me`), seteado por `useLoginFlow` vía `buildSession` antes de
+  // pasar a `authenticated`.
+  const isSuperAdmin = useSessionStore((s) => s.session?.isSuperAdmin ?? false)
 
   useEffect(() => {
     if (state.kind === 'authenticated') {
-      navigate('/', { replace: true })
+      navigate(isSuperAdmin ? '/superadmin' : '/', { replace: true })
     }
-  }, [state.kind, navigate])
+  }, [state.kind, isSuperAdmin, navigate])
 
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
