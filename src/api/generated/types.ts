@@ -777,8 +777,9 @@ export interface paths {
         };
         /**
          * List Properties
-         * @description RF-01: "Listado con filtros: propietario, estado, tipo; busqueda
-         *     por direccion". CA-01-01: la propiedad creada aparece aca.
+         * @description RF-01: "Listado con filtros: propietario, estado, tipo, barrio
+         *     (issue #99); busqueda por direccion". CA-01-01: la propiedad creada
+         *     aparece aca. CA-01-09: filtro `?neighborhood_id=`.
          */
         get: operations["list_properties_v1_properties_get"];
         put?: never;
@@ -786,6 +787,7 @@ export interface paths {
          * Create Property
          * @description RF-01 + CA-01-01: crea una propiedad con direccion, propietario y
          *     tipo -- `landlord_id` validado contra el mismo tenant (RN-D01).
+         *     Issue #99 + CA-01-08: `neighborhood_id` obligatorio, mismo criterio.
          */
         post: operations["create_property_v1_properties_post"];
         delete?: never;
@@ -805,7 +807,8 @@ export interface paths {
          * Get Property
          * @description RF-03 + CA-01-02: ficha consolidada -- datos + cuentas de servicio
          *     juntas. `active_contract`/historial/conceptos: ver docstring de
-         *     `PropertyDetail`.
+         *     `PropertyDetail`. `neighborhood` (issue #99, CA-01-08): `None` para
+         *     propiedades legacy sin barrio.
          */
         get: operations["get_property_v1_properties__property_id__get"];
         put?: never;
@@ -823,6 +826,7 @@ export interface paths {
          * Update Property
          * @description RF-01: PATCH parcial -- todos los campos salvo `status="rented"`
          *     (rechazado por Pydantic, RF-04). Cambio de `landlord_id` auditado.
+         *     `neighborhood_id` (issue #99): editable, pero no puede vaciarse.
          */
         patch: operations["update_property_v1_properties__property_id__patch"];
         trace?: never;
@@ -875,6 +879,56 @@ export interface paths {
          * @description RF-02: PATCH parcial de una cuenta de servicio.
          */
         patch: operations["update_service_account_v1_service_accounts__service_account_id__patch"];
+        trace?: never;
+    };
+    "/v1/neighborhoods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Neighborhoods
+         * @description RF-05: catalogo completo de la organizacion, sin paginacion.
+         */
+        get: operations["list_neighborhoods_v1_neighborhoods_get"];
+        put?: never;
+        /**
+         * Create Neighborhood
+         * @description RF-05 + CA-01-07: alta de barrio; `name` unico por organizacion
+         *     (case-insensitive) -- `409 CONFLICT` si ya existe.
+         */
+        post: operations["create_neighborhood_v1_neighborhoods_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/neighborhoods/{neighborhood_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Neighborhood
+         * @description RF-05 + CA-01-07: baja logica; `409 ENTITY_HAS_DEPENDENCIES` si
+         *     tiene propiedades asociadas.
+         */
+        delete: operations["delete_neighborhood_v1_neighborhoods__neighborhood_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Neighborhood
+         * @description RF-05 + CA-01-07: rename del barrio.
+         */
+        patch: operations["update_neighborhood_v1_neighborhoods__neighborhood_id__patch"];
         trace?: never;
     };
     "/v1/contracts": {
@@ -2700,6 +2754,44 @@ export interface components {
             is_super_admin: boolean;
         };
         /**
+         * NeighborhoodCreate
+         * @description Body de POST /v1/neighborhoods.
+         */
+        NeighborhoodCreate: {
+            /** Name */
+            name: string;
+        };
+        /** NeighborhoodDetail */
+        NeighborhoodDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * NeighborhoodListResponse
+         * @description RF-05: "listado del catalogo completo, sin paginacion".
+         */
+        NeighborhoodListResponse: {
+            /** Data */
+            data: components["schemas"]["NeighborhoodDetail"][];
+        };
+        /** NeighborhoodResponse */
+        NeighborhoodResponse: {
+            data: components["schemas"]["NeighborhoodDetail"];
+        };
+        /**
+         * NeighborhoodUpdate
+         * @description Body de PATCH /v1/neighborhoods/:id -- rename.
+         */
+        NeighborhoodUpdate: {
+            /** Name */
+            name: string;
+        };
+        /**
          * Notification
          * @description Fila propia del usuario -- RF-02: "cada aviso lleva el payload
          *     suficiente para navegar al recurso ... sin queries extra".
@@ -3047,6 +3139,9 @@ export interface components {
         /**
          * PropertyCreate
          * @description Body de POST /v1/properties. `landlord_id` obligatorio (CA-01-01).
+         *     `neighborhood_id` obligatorio (issue #99, CA-01-08) -- decision del
+         *     PO: propiedades nuevas siempre llevan barrio, aunque la columna sea
+         *     nullable en DB por datos legacy.
          */
         PropertyCreate: {
             /** Address */
@@ -3056,6 +3151,11 @@ export interface components {
              * Format: uuid
              */
             landlord_id: string;
+            /**
+             * Neighborhood Id
+             * Format: uuid
+             */
+            neighborhood_id: string;
             /**
              * Property Type
              * @default departamento
@@ -3091,6 +3191,9 @@ export interface components {
              * Format: uuid
              */
             landlord_id: string;
+            /** Neighborhood Id */
+            neighborhood_id: string | null;
+            neighborhood?: components["schemas"]["NeighborhoodDetail"] | null;
             /** Property Type */
             property_type: string;
             /** Status */
@@ -3234,6 +3337,9 @@ export interface components {
              * Format: uuid
              */
             landlord_id: string;
+            /** Neighborhood Id */
+            neighborhood_id: string | null;
+            neighborhood?: components["schemas"]["NeighborhoodDetail"] | null;
             /** Property Type */
             property_type: string;
             /** Status */
@@ -3252,12 +3358,21 @@ export interface components {
          *     (derivado)" -- `status` solo acepta los 2 valores manuales
          *     (`ManualPropertyStatus`); enviar `"rented"` es rechazado por Pydantic
          *     con `422 VALIDATION_ERROR` antes de llegar al service.
+         *
+         *     `neighborhood_id` (issue #99): si el campo viene en el body, no puede
+         *     ser `None` -- "obligatorio en PATCH solo si el campo viene" (RF-01).
+         *     Por eso NO es `UUID | None`: si el cliente omite el campo, Pydantic no
+         *     lo incluye en `model_fields_set` y el service no lo toca; si lo envia
+         *     como `null`, Pydantic rechaza con `422 VALIDATION_ERROR` antes de
+         *     llegar al service (mismo criterio que `status="rented"` mas arriba).
          */
         PropertyUpdate: {
             /** Address */
             address?: string | null;
             /** Landlord Id */
             landlord_id?: string | null;
+            /** Neighborhood Id */
+            neighborhood_id?: string | null;
             /** Property Type */
             property_type?: string | null;
             /** Status */
@@ -5561,6 +5676,7 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number;
                 landlord_id?: string | null;
+                neighborhood_id?: string | null;
                 status?: string | null;
                 property_type?: string | null;
                 search?: string | null;
@@ -5836,6 +5952,123 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyServiceAccountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_neighborhoods_v1_neighborhoods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborhoodListResponse"];
+                };
+            };
+        };
+    };
+    create_neighborhood_v1_neighborhoods_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborhoodCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborhoodResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_neighborhood_v1_neighborhoods__neighborhood_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                neighborhood_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_neighborhood_v1_neighborhoods__neighborhood_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                neighborhood_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborhoodUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborhoodResponse"];
                 };
             };
             /** @description Validation Error */
