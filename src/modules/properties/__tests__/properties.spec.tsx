@@ -41,9 +41,19 @@ vi.mock('@/api/people.api', () => ({
   },
 }))
 
+vi.mock('@/api/neighborhoods.api', () => ({
+  neighborhoodsApi: {
+    list: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  },
+}))
+
 import { propertiesApi } from '@/api/properties.api'
 import { contractsApi } from '@/api/contracts.api'
 import { peopleApi } from '@/api/people.api'
+import { neighborhoodsApi } from '@/api/neighborhoods.api'
 
 const OWNER_SESSION = buildSession({
   userId: 'u-owner',
@@ -84,10 +94,14 @@ const LANDLORD_LIST = {
   meta: {},
 }
 
+const NEIGHBORHOOD_LIST = { data: [{ id: 'n-1', name: 'Nueva Córdoba' }] }
+
 const PROPERTY_SUMMARY = {
   id: 'p-1',
   address: 'Av. Colón 1234',
   landlord_id: 'l-1',
+  neighborhood_id: 'n-1',
+  neighborhood: { id: 'n-1', name: 'Nueva Córdoba' },
   property_type: 'departamento',
   status: 'available',
   created_at: '2026-08-01T00:00:00Z',
@@ -97,6 +111,8 @@ const PROPERTY_DETAIL = {
   id: 'p-1',
   address: 'Av. Colón 1234',
   landlord_id: 'l-1',
+  neighborhood_id: 'n-1',
+  neighborhood: { id: 'n-1', name: 'Nueva Córdoba' },
   property_type: 'departamento',
   status: 'available',
   notes: null,
@@ -231,6 +247,7 @@ function mockFichaDefaults() {
   vi.mocked(propertiesApi.listRecurringCharges).mockResolvedValue({ data: [] })
   vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
   vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+  vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
 }
 
 describe('Módulo 1 — Propiedades (#10)', () => {
@@ -240,9 +257,10 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     localStorage.clear()
   })
 
-  it('CA-01-01: el owner crea una propiedad con dirección, propietario y tipo, y la ve en el listado', async () => {
+  it('CA-01-01: el owner crea una propiedad con dirección, propietario, barrio y tipo, y la ve en el listado', async () => {
     setSession(OWNER_SESSION)
     vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
     vi.mocked(propertiesApi.list)
       .mockResolvedValueOnce({ data: [], meta: {} })
       .mockResolvedValueOnce({ data: [PROPERTY_SUMMARY], meta: {} })
@@ -257,10 +275,16 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     await waitFor(() => screen.getByLabelText('Dirección'))
     await user.type(screen.getByLabelText('Dirección'), 'Av. Colón 1234')
     await user.selectOptions(screen.getByLabelText('Propietario'), 'l-1')
+    // CA-01-08 (issue #99/#49): barrio obligatorio en el alta.
+    await user.selectOptions(screen.getByLabelText('Barrio'), 'n-1')
     await user.click(screen.getByRole('button', { name: 'Crear propiedad' }))
 
     expect(propertiesApi.create).toHaveBeenCalledWith(
-      expect.objectContaining({ address: 'Av. Colón 1234', landlord_id: 'l-1' }),
+      expect.objectContaining({
+        address: 'Av. Colón 1234',
+        landlord_id: 'l-1',
+        neighborhood_id: 'n-1',
+      }),
     )
 
     await waitFor(() => {
@@ -388,5 +412,156 @@ describe('Módulo 1 — Propiedades (#10)', () => {
       expect(screen.getByText('Acceso restringido')).toBeInTheDocument()
     })
     expect(propertiesApi.get).not.toHaveBeenCalled()
+  })
+
+  // ── Issue #99 (back) / #49 (front) — Barrios ────────────────────────────
+
+  it('CA-01-07: el owner crea un barrio desde el ABM y lo ve en el listado', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(neighborhoodsApi.list)
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [{ id: 'n-1', name: 'Nueva Córdoba' }] })
+    vi.mocked(neighborhoodsApi.create).mockResolvedValueOnce({
+      data: { id: 'n-1', name: 'Nueva Córdoba' },
+    })
+
+    renderPropertiesApp('/properties/neighborhoods')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Nuevo barrio' }))
+    await waitFor(() => screen.getByLabelText('Nombre'))
+    await user.type(screen.getByLabelText('Nombre'), 'Nueva Córdoba')
+    await user.click(screen.getByRole('button', { name: 'Crear barrio' }))
+
+    expect(neighborhoodsApi.create).toHaveBeenCalledWith({ name: 'Nueva Córdoba' })
+    await waitFor(() => {
+      expect(screen.getByText('Nueva Córdoba')).toBeInTheDocument()
+    })
+  })
+
+  it('CA-01-07: el owner renombra un barrio existente', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(neighborhoodsApi.update).mockResolvedValueOnce({
+      data: { id: 'n-1', name: 'Nueva Córdoba Renombrado' },
+    })
+
+    renderPropertiesApp('/properties/neighborhoods')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Renombrar' }))
+    const input = screen.getByDisplayValue('Nueva Córdoba')
+    await user.clear(input)
+    await user.type(input, 'Nueva Córdoba Renombrado')
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(neighborhoodsApi.update).toHaveBeenCalledWith('n-1', {
+      name: 'Nueva Córdoba Renombrado',
+    })
+  })
+
+  it('CA-01-07: borrar un barrio sin propiedades asociadas es exitoso', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(neighborhoodsApi.remove).mockResolvedValueOnce(undefined)
+
+    renderPropertiesApp('/properties/neighborhoods')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Eliminar' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+    await waitFor(() => {
+      expect(neighborhoodsApi.remove).toHaveBeenCalledWith('n-1')
+    })
+  })
+
+  it('CA-01-07: borrar un barrio con propiedades asociadas devuelve el mensaje de ENTITY_HAS_DEPENDENCIES', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(neighborhoodsApi.remove).mockRejectedValueOnce(
+      new AdminPropApiError(
+        'ENTITY_HAS_DEPENDENCIES',
+        409,
+        'No se puede eliminar: hay registros que dependen de este recurso.',
+      ),
+    )
+
+    renderPropertiesApp('/properties/neighborhoods')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Eliminar' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('No se puede eliminar: hay registros que dependen de este recurso.'),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('CA-01-08: con el catálogo de barrios vacío, el form de alta guía a crear un barrio primero y bloquea el submit', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue({ data: [] })
+    vi.mocked(propertiesApi.list).mockResolvedValue({ data: [], meta: {} })
+
+    renderPropertiesApp('/properties')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Nueva propiedad' }))
+
+    expect(await screen.findByTestId('property-no-neighborhoods')).toHaveTextContent(
+      'Creá un barrio primero',
+    )
+    expect(screen.getByRole('button', { name: 'Crear propiedad' })).toBeDisabled()
+    expect(propertiesApi.create).not.toHaveBeenCalled()
+  })
+
+  it('CA-01-08: filtra el listado de propiedades por barrio', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(propertiesApi.list)
+      .mockResolvedValueOnce({ data: [PROPERTY_SUMMARY], meta: {} })
+      .mockResolvedValueOnce({ data: [PROPERTY_SUMMARY], meta: {} })
+
+    renderPropertiesApp('/properties')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByText('Av. Colón 1234'))
+    await user.selectOptions(screen.getByLabelText('Filtrar por barrio'), 'n-1')
+
+    await waitFor(() => {
+      expect(propertiesApi.list).toHaveBeenCalledWith(
+        expect.objectContaining({ neighborhood_id: 'n-1' }),
+        expect.anything(),
+      )
+    })
+  })
+
+  it('CA-01-08: una propiedad legacy sin barrio se muestra como "Sin barrio" en el listado y en la ficha', async () => {
+    setSession(OWNER_SESSION)
+    const legacyProperty = { ...PROPERTY_SUMMARY, neighborhood_id: null, neighborhood: null }
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(propertiesApi.list).mockResolvedValue({ data: [legacyProperty], meta: {} })
+
+    renderPropertiesApp('/properties')
+
+    await waitFor(() => {
+      expect(screen.getByText('Sin barrio')).toBeInTheDocument()
+    })
+
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.get).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, neighborhood_id: null, neighborhood: null },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Sin barrio').length).toBeGreaterThan(0)
+    })
   })
 })

@@ -12,8 +12,15 @@ const PropertiesListPage = lazy(() =>
 const PropertyDetailPage = lazy(() =>
   import('./pages/PropertyDetailPage').then((m) => ({ default: m.PropertyDetailPage })),
 )
+// issue #99 (back) / #49 (front): ABM del catálogo de barrios — subruta
+// del módulo (declarada antes de ':propertyId' para que no la capture el
+// param dinámico).
+const NeighborhoodsPage = lazy(() =>
+  import('./pages/NeighborhoodsPage').then((m) => ({ default: m.NeighborhoodsPage })),
+)
 
 export const propertiesRoutes: RouteObject[] = [
   { path: 'properties', element: <PropertiesListPage /> },
+  { path: 'properties/neighborhoods', element: <NeighborhoodsPage /> },
   { path: 'properties/:propertyId', element: <PropertyDetailPage /> },
 ]
