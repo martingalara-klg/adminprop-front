@@ -13,10 +13,10 @@
 // `Number()` acá es aceptable (es sólo indicación en pantalla, mismo
 // criterio de "no replicar lógica de negocio" que adjustmentPreview.ts,
 // pero sin persistir nada ni necesitar precisión de centavos exacta).
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
-import { Button, Input, Label } from '@/shared/components'
+import { Button, Input, Label, MoneyInput } from '@/shared/components'
 import { formatMoney } from '@/shared/utils/format'
 import {
   buildRegisterPaymentSchema,
@@ -56,6 +56,7 @@ export function RegisterPaymentForm({
 
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -151,7 +152,19 @@ export function RegisterPaymentForm({
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="payment-amount">Importe a capital ({contractCurrency})</Label>
-        <Input id="payment-amount" aria-invalid={!!errors.amount} {...register('amount')} />
+        <Controller
+          control={control}
+          name="amount"
+          render={({ field }) => (
+            <MoneyInput
+              id="payment-amount"
+              aria-invalid={!!errors.amount}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+            />
+          )}
+        />
         {errors.amount ? (
           <p className="text-sm text-destructive" role="alert">
             {errors.amount.message}
@@ -162,10 +175,19 @@ export function RegisterPaymentForm({
       {requiresExchangeRate ? (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="payment-exchange-rate">Tipo de cambio</Label>
-          <Input
-            id="payment-exchange-rate"
-            aria-invalid={!!errors.exchange_rate}
-            {...register('exchange_rate')}
+          <Controller
+            control={control}
+            name="exchange_rate"
+            render={({ field }) => (
+              <MoneyInput
+                id="payment-exchange-rate"
+                decimalPrecision={4}
+                aria-invalid={!!errors.exchange_rate}
+                value={field.value ?? ''}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
+            )}
           />
           {errors.exchange_rate ? (
             <p className="text-sm text-destructive" role="alert">
@@ -215,10 +237,18 @@ export function RegisterPaymentForm({
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="payment-charged-interest">Interés cobrado</Label>
-          <Input
-            id="payment-charged-interest"
-            aria-invalid={!!errors.charged_interest}
-            {...register('charged_interest')}
+          <Controller
+            control={control}
+            name="charged_interest"
+            render={({ field }) => (
+              <MoneyInput
+                id="payment-charged-interest"
+                aria-invalid={!!errors.charged_interest}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
+            )}
           />
           {errors.charged_interest ? (
             <p className="text-sm text-destructive" role="alert">

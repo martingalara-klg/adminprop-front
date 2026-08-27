@@ -3,9 +3,9 @@
 // RF-02 + CA-03-01/02/03: alta de contrato ARS/USD. RN-C: USD no ajusta
 // — el form oculta dinámicamente frecuencia/índice/notas cuando la
 // moneda elegida es USD (no sólo los deshabilita: no se muestran).
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Input, Label } from '@/shared/components'
+import { Button, Input, Label, MoneyInput } from '@/shared/components'
 import type { PropertySummary } from '@/api/properties.api'
 import type { RenterDetail } from '@/api/people.api'
 import {
@@ -26,6 +26,7 @@ type Props = {
 export function ContractForm({ properties, renters, errorMessage, isSubmitting, onSubmit }: Props) {
   const {
     register,
+    control,
     handleSubmit,
     reset,
     watch,
@@ -120,10 +121,18 @@ export function ContractForm({ properties, renters, errorMessage, isSubmitting, 
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="contract-initial-amount">Monto inicial</Label>
-        <Input
-          id="contract-initial-amount"
-          aria-invalid={!!errors.initial_amount}
-          {...register('initial_amount')}
+        <Controller
+          control={control}
+          name="initial_amount"
+          render={({ field }) => (
+            <MoneyInput
+              id="contract-initial-amount"
+              aria-invalid={!!errors.initial_amount}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+            />
+          )}
         />
         {errors.initial_amount ? (
           <p className="text-sm text-destructive" role="alert">

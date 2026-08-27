@@ -4,9 +4,9 @@
 // fotos del resultado (opcional) y `final_cost` ajustable (default: el
 // monto de la cotización aprobada — si se deja vacío, el backend
 // resuelve el default).
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Input, Label } from '@/shared/components'
+import { Button, Label, MoneyInput } from '@/shared/components'
 import { PhotoPicker } from './PhotoPicker'
 import { formatMoney } from '@/shared/utils/format'
 import { closeWorkOrderSchema, type CloseWorkOrderInput } from '../schemas/maintenance.schema'
@@ -29,7 +29,7 @@ export function CloseWorkOrderForm({
   onSubmit,
 }: Props) {
   const {
-    register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<CloseWorkOrderInput>({
@@ -49,11 +49,19 @@ export function CloseWorkOrderForm({
         <Label htmlFor="close-final-cost">
           Costo final {approvedQuoteAmount ? `(default: ${formatMoney(approvedQuoteAmount)})` : ''}
         </Label>
-        <Input
-          id="close-final-cost"
-          placeholder={approvedQuoteAmount ?? undefined}
-          aria-invalid={!!errors.final_cost}
-          {...register('final_cost')}
+        <Controller
+          control={control}
+          name="final_cost"
+          render={({ field }) => (
+            <MoneyInput
+              id="close-final-cost"
+              placeholder={approvedQuoteAmount ? formatMoney(approvedQuoteAmount) : undefined}
+              aria-invalid={!!errors.final_cost}
+              value={field.value ?? ''}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+            />
+          )}
         />
         {errors.final_cost ? (
           <p className="text-sm text-destructive" role="alert">

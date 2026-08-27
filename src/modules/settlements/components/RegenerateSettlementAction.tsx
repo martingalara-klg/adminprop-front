@@ -6,9 +6,9 @@
 // useSettlementDetail, así que el polling arranca solo apenas
 // `job_status` vuelve a pending/processing tras la mutation.
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Input, Label } from '@/shared/components'
+import { Button, Label, MoneyInput } from '@/shared/components'
 import {
   regenerateSettlementSchema,
   type RegenerateSettlementInput,
@@ -22,7 +22,7 @@ type Props = {
 
 export function RegenerateSettlementAction({ isSubmitting, errorMessage, onSubmit }: Props) {
   const [isOpen, setIsOpen] = useState(false)
-  const { register, handleSubmit } = useForm<RegenerateSettlementInput>({
+  const { control, handleSubmit } = useForm<RegenerateSettlementInput>({
     resolver: zodResolver(regenerateSettlementSchema),
     defaultValues: { exchange_rate: '' },
   })
@@ -49,7 +49,19 @@ export function RegenerateSettlementAction({ isSubmitting, errorMessage, onSubmi
         <Label htmlFor="regenerate-exchange-rate">
           Nuevo tipo de cambio (opcional — se mantiene el actual si lo dejás vacío)
         </Label>
-        <Input id="regenerate-exchange-rate" {...register('exchange_rate')} />
+        <Controller
+          control={control}
+          name="exchange_rate"
+          render={({ field }) => (
+            <MoneyInput
+              id="regenerate-exchange-rate"
+              decimalPrecision={4}
+              value={field.value ?? ''}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+            />
+          )}
+        />
       </div>
       {errorMessage ? (
         <p className="text-sm text-destructive" role="alert">

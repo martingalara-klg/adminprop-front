@@ -2,9 +2,9 @@
 //
 // RF-02/CA-06-02: el encargado (o admin) sube una cotización — monto,
 // descripción, fotos.
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Input, Label } from '@/shared/components'
+import { Button, Input, Label, MoneyInput } from '@/shared/components'
 import { PhotoPicker } from './PhotoPicker'
 import { quoteSchema, type QuoteInput } from '../schemas/maintenance.schema'
 
@@ -19,6 +19,7 @@ type Props = {
 export function QuoteForm({ files, onFilesChange, errorMessage, isSubmitting, onSubmit }: Props) {
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -40,7 +41,19 @@ export function QuoteForm({ files, onFilesChange, errorMessage, isSubmitting, on
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="quote-amount">Monto</Label>
-        <Input id="quote-amount" aria-invalid={!!errors.amount} {...register('amount')} />
+        <Controller
+          control={control}
+          name="amount"
+          render={({ field }) => (
+            <MoneyInput
+              id="quote-amount"
+              aria-invalid={!!errors.amount}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+            />
+          )}
+        />
         {errors.amount ? (
           <p className="text-sm text-destructive" role="alert">
             {errors.amount.message}
