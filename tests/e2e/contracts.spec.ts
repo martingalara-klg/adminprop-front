@@ -37,6 +37,10 @@ test.describe('UC-CONTRATOS — Alta y activación de contrato', () => {
     const startDate = isoDateDaysAgo(5)
     const endDate = isoDateDaysAhead(365)
 
+    // Issue #48: el form de alta vive en un modal — se abre desde el
+    // botón "Nuevo contrato" del listado.
+    await page.getByRole('button', { name: 'Nuevo contrato' }).click()
+
     await page.getByLabel('Propiedad').selectOption({ label: SEED.property.address })
     await page.getByLabel('Inquilino').selectOption({ label: SEED.renter.name })
     await page.getByLabel('Moneda').selectOption('ARS')
