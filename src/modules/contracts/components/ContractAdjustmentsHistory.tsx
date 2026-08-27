@@ -2,6 +2,12 @@
 //
 // RF-01 + RF-04 paso 5: historial de ajustes del contrato (pendientes y
 // aplicados). Cada ajuste aplicado es inmutable — sólo lectura acá.
+//
+// Issue #50 (espejo de back#100, RN-08/RN-C06, CA-03-11): el ajuste
+// sintético de "carga inicial" (alta de contrato en curso) se distingue
+// del resto — `pct_applied` viene `null` y `notes` prefijado
+// `"Carga inicial:"`. Se presenta con una etiqueta propia, nunca como un
+// "%" vacío/genérico, para no confundirlo con un ajuste manual normal.
 import { EmptyState } from '@/shared/components'
 import type { AdjustmentSummary } from '@/api/contracts.api'
 import { formatDate, formatMoney } from '@/shared/utils/format'
@@ -9,6 +15,12 @@ import { formatDate, formatMoney } from '@/shared/utils/format'
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
   applied: 'Aplicado',
+}
+
+const INITIAL_LOAD_NOTES_PREFIX = 'Carga inicial:'
+
+function isInitialLoadAdjustment(adjustment: AdjustmentSummary): boolean {
+  return adjustment.pct_applied === null && !!adjustment.notes?.startsWith(INITIAL_LOAD_NOTES_PREFIX)
 }
 
 type Props = {
@@ -38,20 +50,36 @@ export function ContractAdjustmentsHistory({ adjustments }: Props) {
         </tr>
       </thead>
       <tbody>
-        {adjustments.map((adjustment) => (
-          <tr key={adjustment.id} className="border-b last:border-0">
-            <td className="py-2">{formatDate(adjustment.due_period)}</td>
-            <td className="py-2">{STATUS_LABELS[adjustment.status] ?? adjustment.status}</td>
-            <td className="py-2">{adjustment.pct_applied ? `${adjustment.pct_applied}%` : '—'}</td>
-            <td className="py-2">
-              {adjustment.previous_amount ? formatMoney(adjustment.previous_amount) : '—'}
-            </td>
-            <td className="py-2">
-              {adjustment.new_amount ? formatMoney(adjustment.new_amount) : '—'}
-            </td>
-            <td className="py-2">{adjustment.applied_by ?? '—'}</td>
-          </tr>
-        ))}
+        {adjustments.map((adjustment) => {
+          const isInitialLoad = isInitialLoadAdjustment(adjustment)
+          return (
+            <tr key={adjustment.id} className="border-b last:border-0">
+              <td className="py-2">{formatDate(adjustment.due_period)}</td>
+              <td className="py-2">{STATUS_LABELS[adjustment.status] ?? adjustment.status}</td>
+              <td className="py-2">
+                {isInitialLoad ? (
+                  <span
+                    className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                    data-testid={`initial-load-badge-${adjustment.id}`}
+                  >
+                    Carga inicial
+                  </span>
+                ) : adjustment.pct_applied ? (
+                  `${adjustment.pct_applied}%`
+                ) : (
+                  '—'
+                )}
+              </td>
+              <td className="py-2">
+                {adjustment.previous_amount ? formatMoney(adjustment.previous_amount) : '—'}
+              </td>
+              <td className="py-2">
+                {adjustment.new_amount ? formatMoney(adjustment.new_amount) : '—'}
+              </td>
+              <td className="py-2">{adjustment.applied_by ?? '—'}</td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )
