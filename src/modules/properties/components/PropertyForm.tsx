@@ -4,8 +4,10 @@
 // (obligatorio, FK a landlords) y tipo.
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Link } from 'react-router-dom'
 import { Button, Input, Label } from '@/shared/components'
 import type { LandlordSummary } from '@/api/people.api'
+import type { NeighborhoodDetail } from '@/api/neighborhoods.api'
 import {
   createPropertySchema,
   PROPERTY_TYPE_OPTIONS,
@@ -14,12 +16,19 @@ import {
 
 type Props = {
   landlords: LandlordSummary[]
+  neighborhoods: NeighborhoodDetail[]
   errorMessage: string | null
   isSubmitting: boolean
   onSubmit: (values: CreatePropertyInput) => void
 }
 
-export function PropertyForm({ landlords, errorMessage, isSubmitting, onSubmit }: Props) {
+export function PropertyForm({
+  landlords,
+  neighborhoods,
+  errorMessage,
+  isSubmitting,
+  onSubmit,
+}: Props) {
   const {
     register,
     handleSubmit,
@@ -27,8 +36,20 @@ export function PropertyForm({ landlords, errorMessage, isSubmitting, onSubmit }
     formState: { errors },
   } = useForm<CreatePropertyInput>({
     resolver: zodResolver(createPropertySchema),
-    defaultValues: { address: '', landlord_id: '', property_type: 'departamento', notes: '' },
+    defaultValues: {
+      address: '',
+      landlord_id: '',
+      neighborhood_id: '',
+      property_type: 'departamento',
+      notes: '',
+    },
   })
+
+  // issue #99/#49: catálogo vacío — guiar al usuario a crear un barrio
+  // primero en vez de mostrar un select sin opciones (decisión de
+  // implementación, ver PR): el submit queda bloqueado igual porque Zod
+  // exige `neighborhood_id` no vacío.
+  const hasNeighborhoods = neighborhoods.length > 0
 
   return (
     <form
@@ -74,6 +95,40 @@ export function PropertyForm({ landlords, errorMessage, isSubmitting, onSubmit }
       </div>
 
       <div className="flex flex-col gap-1.5">
+        <Label htmlFor="property-neighborhood">Barrio</Label>
+        {hasNeighborhoods ? (
+          <>
+            <select
+              id="property-neighborhood"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              aria-invalid={!!errors.neighborhood_id}
+              {...register('neighborhood_id')}
+            >
+              <option value="">Seleccioná un barrio…</option>
+              {neighborhoods.map((neighborhood) => (
+                <option key={neighborhood.id} value={neighborhood.id}>
+                  {neighborhood.name}
+                </option>
+              ))}
+            </select>
+            {errors.neighborhood_id ? (
+              <p className="text-sm text-destructive" role="alert">
+                {errors.neighborhood_id.message}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="property-no-neighborhoods">
+            Todavía no hay barrios cargados.{' '}
+            <Link to="/properties/neighborhoods" className="font-medium underline-offset-4 hover:underline">
+              Creá un barrio primero
+            </Link>
+            .
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="property-type">Tipo</Label>
         <select
           id="property-type"
@@ -100,7 +155,7 @@ export function PropertyForm({ landlords, errorMessage, isSubmitting, onSubmit }
       ) : null}
 
       <div>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || !hasNeighborhoods}>
           {isSubmitting ? 'Creando…' : 'Crear propiedad'}
         </Button>
       </div>

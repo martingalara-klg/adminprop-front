@@ -25,6 +25,7 @@ export function PropertiesTable({ properties, landlords }: Props) {
         <tr className="border-b text-left text-muted-foreground">
           <th className="py-2 pr-4 font-medium">Dirección</th>
           <th className="py-2 pr-4 font-medium">Propietario</th>
+          <th className="py-2 pr-4 font-medium">Barrio</th>
           <th className="py-2 pr-4 font-medium">Tipo</th>
           <th className="py-2 pr-4 font-medium">Estado</th>
           <th className="py-2 font-medium" />
@@ -36,6 +37,11 @@ export function PropertiesTable({ properties, landlords }: Props) {
             <td className="py-2 pr-4">{property.address}</td>
             <td className="py-2 pr-4 text-muted-foreground">
               {landlordNameById.get(property.landlord_id) ?? '—'}
+            </td>
+            {/* issue #99/#49: propiedades legacy preexistentes al catálogo
+                de barrios no tienen `neighborhood` embebido — "Sin barrio". */}
+            <td className="py-2 pr-4 text-muted-foreground">
+              {property.neighborhood?.name ?? 'Sin barrio'}
             </td>
             <td className="py-2 pr-4 text-muted-foreground">{property.property_type}</td>
             <td className="py-2 pr-4">{STATUS_LABELS[property.status] ?? property.status}</td>

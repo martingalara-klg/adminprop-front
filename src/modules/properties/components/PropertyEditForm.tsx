@@ -4,8 +4,10 @@
 // — RF-04). El select de estado solo ofrece los 2 valores manuales.
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Link } from 'react-router-dom'
 import { Button, Input, Label } from '@/shared/components'
 import type { LandlordSummary } from '@/api/people.api'
+import type { NeighborhoodDetail } from '@/api/neighborhoods.api'
 import type { PropertyDetail } from '@/api/properties.api'
 import {
   updatePropertySchema,
@@ -22,13 +24,25 @@ const STATUS_LABELS: Record<string, string> = {
 type Props = {
   property: PropertyDetail
   landlords: LandlordSummary[]
+  neighborhoods: NeighborhoodDetail[]
   errorMessage: string | null
   isSubmitting: boolean
   onSubmit: (values: UpdatePropertyInput) => void
 }
 
-export function PropertyEditForm({ property, landlords, errorMessage, isSubmitting, onSubmit }: Props) {
+export function PropertyEditForm({
+  property,
+  landlords,
+  neighborhoods,
+  errorMessage,
+  isSubmitting,
+  onSubmit,
+}: Props) {
   const isRented = property.status === 'rented'
+  // issue #99/#49: propiedades legacy (preexistentes) pueden no tener
+  // barrio — `neighborhood_id` es `string | null`. El schema exige un
+  // valor no vacío al guardar (CA-01-08 también aplica a edición).
+  const hasNeighborhoods = neighborhoods.length > 0
 
   const {
     register,
@@ -39,6 +53,7 @@ export function PropertyEditForm({ property, landlords, errorMessage, isSubmitti
     defaultValues: {
       address: property.address,
       landlord_id: property.landlord_id,
+      neighborhood_id: property.neighborhood_id ?? '',
       property_type: property.property_type,
       // RF-04: `rented` es derivado — el form nunca lo ofrece; si la
       // propiedad está `rented`, el select queda en `available` como
@@ -84,6 +99,43 @@ export function PropertyEditForm({ property, landlords, errorMessage, isSubmitti
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="edit-property-neighborhood">Barrio</Label>
+        {hasNeighborhoods ? (
+          <>
+            <select
+              id="edit-property-neighborhood"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              aria-invalid={!!errors.neighborhood_id}
+              {...register('neighborhood_id')}
+            >
+              <option value="">Seleccioná un barrio…</option>
+              {neighborhoods.map((neighborhood) => (
+                <option key={neighborhood.id} value={neighborhood.id}>
+                  {neighborhood.name}
+                </option>
+              ))}
+            </select>
+            {errors.neighborhood_id ? (
+              <p className="text-sm text-destructive" role="alert">
+                {errors.neighborhood_id.message}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="property-no-neighborhoods">
+            Todavía no hay barrios cargados.{' '}
+            <Link
+              to="/properties/neighborhoods"
+              className="font-medium underline-offset-4 hover:underline"
+            >
+              Creá un barrio primero
+            </Link>
+            .
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -134,7 +186,7 @@ export function PropertyEditForm({ property, landlords, errorMessage, isSubmitti
       ) : null}
 
       <div>
-        <Button type="submit" disabled={isSubmitting || isRented}>
+        <Button type="submit" disabled={isSubmitting || isRented || !hasNeighborhoods}>
           {isSubmitting ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </div>

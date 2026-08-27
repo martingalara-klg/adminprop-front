@@ -36,6 +36,7 @@ import { usePropertyDetail } from '../hooks/usePropertyDetail'
 import { useUpdateProperty } from '../hooks/useUpdateProperty'
 import { useDeleteProperty } from '../hooks/useDeleteProperty'
 import { useLandlordOptions } from '../hooks/useLandlordOptions'
+import { useNeighborhoodsList } from '../hooks/useNeighborhoodsList'
 import { useServiceAccounts } from '../hooks/useServiceAccounts'
 import { useCreateServiceAccount } from '../hooks/useCreateServiceAccount'
 import { useUpdateServiceAccount } from '../hooks/useUpdateServiceAccount'
@@ -54,6 +55,7 @@ export function PropertyDetailPage() {
 
   const propertyQuery = usePropertyDetail(propertyId, canReadProperties)
   const landlordsQuery = useLandlordOptions(canReadProperties)
+  const neighborhoodsQuery = useNeighborhoodsList(canReadProperties)
   const serviceAccountsQuery = useServiceAccounts(propertyId, canReadProperties)
   const workOrdersQuery = usePropertyWorkOrders(propertyId, canReadProperties)
   const recurringChargesQuery = usePropertyRecurringCharges(propertyId, canReadProperties)
@@ -91,6 +93,7 @@ export function PropertyDetailPage() {
 
   const property = propertyQuery.data.data
   const landlords = landlordsQuery.data?.data ?? []
+  const neighborhoods = neighborhoodsQuery.data?.data ?? []
   const serviceAccounts = serviceAccountsQuery.data?.data ?? []
   const workOrders = workOrdersQuery.data?.data ?? []
   const recurringCharges = recurringChargesQuery.data?.data ?? []
@@ -159,6 +162,9 @@ export function PropertyDetailPage() {
     <div className="flex flex-col gap-8">
       <header>
         <h1 className="text-lg font-semibold">{property.address}</h1>
+        {/* issue #99/#49: propiedades legacy preexistentes al catálogo de
+            barrios no tienen `neighborhood` embebido — "Sin barrio". */}
+        <p className="text-sm text-muted-foreground">{property.neighborhood?.name ?? 'Sin barrio'}</p>
       </header>
 
       {canManageProperties ? (
@@ -166,6 +172,7 @@ export function PropertyDetailPage() {
           <PropertyEditForm
             property={property}
             landlords={landlords}
+            neighborhoods={neighborhoods}
             errorMessage={editError}
             isSubmitting={updateProperty.isPending}
             onSubmit={handleEditSubmit}
