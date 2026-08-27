@@ -6,7 +6,21 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState, ForbiddenState, Input, Label } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  EmptyState,
+  ForbiddenState,
+  Input,
+  Label,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import type { CreateContractInput } from '../schemas/contract.schema'
 
 import { ContractsTable } from '../components/ContractsTable'
@@ -23,6 +37,8 @@ export function ContractsListPage() {
 
   const [expiringInDays, setExpiringInDays] = useState('')
   const [createError, setCreateError] = useState<unknown>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
   const appliedExpiringInDays =
     expiringInDays && !Number.isNaN(Number(expiringInDays)) ? Number(expiringInDays) : undefined
@@ -60,14 +76,25 @@ export function ContractsListPage() {
             ? Number(values.adjustment_frequency_months)
             : undefined,
         adjustment_index:
-          values.currency === 'ARS' && values.adjustment_index ? values.adjustment_index : undefined,
+          values.currency === 'ARS' && values.adjustment_index
+            ? values.adjustment_index
+            : undefined,
         adjustment_index_notes:
           values.currency === 'ARS' && values.adjustment_index_notes
             ? values.adjustment_index_notes
             : undefined,
         notes: values.notes || undefined,
       },
-      { onError: (error) => setCreateError(error) },
+      {
+        onSuccess: () => {
+          setIsCreateOpen(false)
+          setCreateSuccess('Contrato creado correctamente.')
+        },
+        // El modal queda abierto en error (CA-03-02: 409 CONTRACT_OVERLAP
+        // ofrece un link al contrato en conflicto que el usuario necesita
+        // poder ver/clickear sin perder el form).
+        onError: (error) => setCreateError(error),
+      },
     )
   }
 
@@ -76,8 +103,34 @@ export function ContractsListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
+      <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Contratos</h1>
+        {canManageContracts ? (
+          <Dialog
+            open={isCreateOpen}
+            onOpenChange={(open) => {
+              setIsCreateOpen(open)
+              if (open) setCreateError(null)
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button">Nuevo contrato</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nuevo contrato</DialogTitle>
+              </DialogHeader>
+              <ContractForm
+                properties={properties}
+                renters={renters}
+                errorMessage={null}
+                isSubmitting={createContract.isPending}
+                onSubmit={handleCreate}
+              />
+              {createError ? <ContractOverlapError error={createError} /> : null}
+            </DialogContent>
+          </Dialog>
+        ) : null}
       </header>
 
       {canManageContracts ? (
@@ -88,6 +141,8 @@ export function ContractsListPage() {
           Ir a la bandeja de ajustes
         </Link>
       ) : null}
+
+      {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
 
       <section className="flex flex-col gap-2">
         <Label htmlFor="contracts-expiring-filter">Vencen dentro de (días)</Label>
@@ -110,19 +165,6 @@ export function ContractsListPage() {
           <ContractsTable contracts={contractsQuery.data.data} />
         ) : null}
       </section>
-
-      {canManageContracts ? (
-        <section className="flex flex-col gap-2">
-          <ContractForm
-            properties={properties}
-            renters={renters}
-            errorMessage={null}
-            isSubmitting={createContract.isPending}
-            onSubmit={handleCreate}
-          />
-          {createError ? <ContractOverlapError error={createError} /> : null}
-        </section>
-      ) : null}
     </div>
   )
 }

@@ -69,7 +69,18 @@ function setSession(session: ReturnType<typeof buildSession>) {
 }
 
 const LANDLORD_LIST = {
-  data: [{ id: 'l-1', name: 'Juan Pérez', tax_id: null, phone: null, email: null, commission_pct: '10.00', notes: null, created_at: '2026-08-01T00:00:00Z' }],
+  data: [
+    {
+      id: 'l-1',
+      name: 'Juan Pérez',
+      tax_id: null,
+      phone: null,
+      email: null,
+      commission_pct: '10.00',
+      notes: null,
+      created_at: '2026-08-01T00:00:00Z',
+    },
+  ],
   meta: {},
 }
 
@@ -95,12 +106,66 @@ const PROPERTY_DETAIL = {
 }
 
 const SERVICE_ACCOUNTS = [
-  { id: 'sa-1', property_id: 'p-1', service_type: 'rentas', account_number: '1001', secondary_number: null, notes: null, created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' },
-  { id: 'sa-2', property_id: 'p-1', service_type: 'municipalidad', account_number: '2002', secondary_number: null, notes: null, created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' },
-  { id: 'sa-3', property_id: 'p-1', service_type: 'luz', account_number: '3003', secondary_number: '4004', notes: null, created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' },
-  { id: 'sa-4', property_id: 'p-1', service_type: 'gas', account_number: '5005', secondary_number: null, notes: null, created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' },
-  { id: 'sa-5', property_id: 'p-1', service_type: 'agua', account_number: '6006', secondary_number: null, notes: null, created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' },
-  { id: 'sa-6', property_id: 'p-1', service_type: 'expensas', account_number: '7007', secondary_number: null, notes: null, created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' },
+  {
+    id: 'sa-1',
+    property_id: 'p-1',
+    service_type: 'rentas',
+    account_number: '1001',
+    secondary_number: null,
+    notes: null,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  },
+  {
+    id: 'sa-2',
+    property_id: 'p-1',
+    service_type: 'municipalidad',
+    account_number: '2002',
+    secondary_number: null,
+    notes: null,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  },
+  {
+    id: 'sa-3',
+    property_id: 'p-1',
+    service_type: 'luz',
+    account_number: '3003',
+    secondary_number: '4004',
+    notes: null,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  },
+  {
+    id: 'sa-4',
+    property_id: 'p-1',
+    service_type: 'gas',
+    account_number: '5005',
+    secondary_number: null,
+    notes: null,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  },
+  {
+    id: 'sa-5',
+    property_id: 'p-1',
+    service_type: 'agua',
+    account_number: '6006',
+    secondary_number: null,
+    notes: null,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  },
+  {
+    id: 'sa-6',
+    property_id: 'p-1',
+    service_type: 'expensas',
+    account_number: '7007',
+    secondary_number: null,
+    notes: null,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  },
 ]
 
 const WORK_ORDERS: PropertyWorkOrderHistoryEntry[] = [
@@ -186,6 +251,9 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     renderPropertiesApp('/properties')
     const user = userEvent.setup()
 
+    // Issue #48: el form de alta vive en un modal — se abre desde el
+    // botón "Nueva propiedad" del listado.
+    await user.click(await screen.findByRole('button', { name: 'Nueva propiedad' }))
     await waitFor(() => screen.getByLabelText('Dirección'))
     await user.type(screen.getByLabelText('Dirección'), 'Av. Colón 1234')
     await user.selectOptions(screen.getByLabelText('Propietario'), 'l-1')
@@ -267,9 +335,7 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     renderPropertiesApp('/properties/p-1')
 
     await waitFor(() => screen.getByTestId('property-status-rented'))
-    expect(screen.getByTestId('property-status-rented')).toHaveTextContent(
-      /estado automático/i,
-    )
+    expect(screen.getByTestId('property-status-rented')).toHaveTextContent(/estado automático/i)
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled()
   })
 

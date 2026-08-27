@@ -6,7 +6,19 @@
 // ForbiddenState).
 import { useState } from 'react'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState, ForbiddenState } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  EmptyState,
+  ForbiddenState,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { PropertyCreate } from '@/api/properties.api'
 
@@ -27,6 +39,8 @@ export function PropertiesListPage() {
   const createProperty = useCreateProperty()
 
   const [createError, setCreateError] = useState<string | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
   if (!canReadProperties) {
     return (
@@ -37,6 +51,10 @@ export function PropertiesListPage() {
   function handleCreate(values: PropertyCreate) {
     setCreateError(null)
     createProperty.mutate(values, {
+      onSuccess: () => {
+        setIsCreateOpen(false)
+        setCreateSuccess('Propiedad creada correctamente.')
+      },
       onError: (error) => setCreateError(resolveErrorMessage(error)),
     })
   }
@@ -45,9 +63,35 @@ export function PropertiesListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
+      <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Propiedades</h1>
+        {canManageProperties ? (
+          <Dialog
+            open={isCreateOpen}
+            onOpenChange={(open) => {
+              setIsCreateOpen(open)
+              if (open) setCreateError(null)
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button">Nueva propiedad</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nueva propiedad</DialogTitle>
+              </DialogHeader>
+              <PropertyForm
+                landlords={landlords}
+                errorMessage={createError}
+                isSubmitting={createProperty.isPending}
+                onSubmit={handleCreate}
+              />
+            </DialogContent>
+          </Dialog>
+        ) : null}
       </header>
+
+      {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
 
       <section>
         {propertiesQuery.isLoading ? <Spinner label="Cargando propiedades..." /> : null}
@@ -61,17 +105,6 @@ export function PropertiesListPage() {
           <PropertiesTable properties={propertiesQuery.data.data} landlords={landlords} />
         ) : null}
       </section>
-
-      {canManageProperties ? (
-        <section>
-          <PropertyForm
-            landlords={landlords}
-            errorMessage={createError}
-            isSubmitting={createProperty.isPending}
-            onSubmit={handleCreate}
-          />
-        </section>
-      ) : null}
     </div>
   )
 }

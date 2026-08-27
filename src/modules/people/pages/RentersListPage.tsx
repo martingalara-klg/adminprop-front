@@ -4,7 +4,19 @@
 // (CA-02-07/RN-A01).
 import { useState } from 'react'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState, ForbiddenState } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  EmptyState,
+  ForbiddenState,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { RenterCreate } from '@/api/people.api'
 
@@ -22,6 +34,8 @@ export function RentersListPage() {
   const createRenter = useCreateRenter()
 
   const [createError, setCreateError] = useState<string | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
   if (!canReadRenters) {
     return (
@@ -32,6 +46,10 @@ export function RentersListPage() {
   function handleCreate(values: RenterCreate) {
     setCreateError(null)
     createRenter.mutate(values, {
+      onSuccess: () => {
+        setIsCreateOpen(false)
+        setCreateSuccess('Inquilino creado correctamente.')
+      },
       onError: (error) => setCreateError(resolveErrorMessage(error)),
     })
   }
@@ -43,8 +61,36 @@ export function RentersListPage() {
         <PeopleTabsNav />
       </header>
 
+      <section className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-muted-foreground">Inquilinos</h2>
+        {canManageRenters ? (
+          <Dialog
+            open={isCreateOpen}
+            onOpenChange={(open) => {
+              setIsCreateOpen(open)
+              if (open) setCreateError(null)
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button">Nuevo inquilino</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nuevo inquilino</DialogTitle>
+              </DialogHeader>
+              <RenterForm
+                errorMessage={createError}
+                isSubmitting={createRenter.isPending}
+                onSubmit={handleCreate}
+              />
+            </DialogContent>
+          </Dialog>
+        ) : null}
+      </section>
+
+      {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
+
       <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Inquilinos</h2>
         {rentersQuery.isLoading ? <Spinner label="Cargando inquilinos..." /> : null}
         {rentersQuery.isError ? (
           <ErrorState message={resolveErrorMessage(rentersQuery.error)} />
@@ -56,16 +102,6 @@ export function RentersListPage() {
           <RentersTable renters={rentersQuery.data.data} />
         ) : null}
       </section>
-
-      {canManageRenters ? (
-        <section>
-          <RenterForm
-            errorMessage={createError}
-            isSubmitting={createRenter.isPending}
-            onSubmit={handleCreate}
-          />
-        </section>
-      ) : null}
     </div>
   )
 }

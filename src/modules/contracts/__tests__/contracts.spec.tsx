@@ -45,7 +45,13 @@ const OWNER_SESSION = buildSession({
   email: 'owner@inmobiliaria-sur.com',
   fullName: 'Owner Uno',
   organization: { id: 'org-1', name: 'Inmobiliaria Sur', role: 'owner' },
-  permissions: ['contract:read', 'contract:manage', 'adjustment:apply', 'property:read', 'renter:read'],
+  permissions: [
+    'contract:read',
+    'contract:manage',
+    'adjustment:apply',
+    'property:read',
+    'renter:read',
+  ],
   isSuperAdmin: false,
 })
 
@@ -73,12 +79,32 @@ function setSession(session: ReturnType<typeof buildSession>) {
 }
 
 const PROPERTIES = {
-  data: [{ id: 'p-1', address: 'Av. Colón 1234', landlord_id: 'l-1', property_type: 'departamento', status: 'available', created_at: '2026-08-01T00:00:00Z' }],
+  data: [
+    {
+      id: 'p-1',
+      address: 'Av. Colón 1234',
+      landlord_id: 'l-1',
+      property_type: 'departamento',
+      status: 'available',
+      created_at: '2026-08-01T00:00:00Z',
+    },
+  ],
   meta: {},
 }
 
 const RENTERS = {
-  data: [{ id: 'r-1', name: 'María López', tax_id: null, phone: null, email: null, notes: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }],
+  data: [
+    {
+      id: 'r-1',
+      name: 'María López',
+      tax_id: null,
+      phone: null,
+      email: null,
+      notes: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    },
+  ],
   meta: {},
 }
 
@@ -108,6 +134,12 @@ function mockOptionDefaults() {
   vi.mocked(peopleApi.listRenters).mockResolvedValue(RENTERS)
 }
 
+// Issue #48: el form de alta vive en un modal — helper que lo abre desde
+// el botón "Nuevo contrato" del listado.
+async function openCreateContractModal(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Nuevo contrato' }))
+}
+
 describe('Módulo 3 — Contratos (#11)', () => {
   afterEach(() => {
     vi.clearAllMocks()
@@ -126,6 +158,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
     renderContractsApp('/contracts')
     const user = userEvent.setup()
 
+    await openCreateContractModal(user)
     await screen.findByRole('option', { name: 'Av. Colón 1234' })
     await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
     await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
@@ -159,6 +192,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
     renderContractsApp('/contracts')
     const user = userEvent.setup()
 
+    await openCreateContractModal(user)
     await waitFor(() => screen.getByLabelText('Moneda'))
     await user.selectOptions(screen.getByLabelText('Moneda'), 'USD')
 
@@ -186,6 +220,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
     renderContractsApp('/contracts')
     const user = userEvent.setup()
 
+    await openCreateContractModal(user)
     await screen.findByRole('option', { name: 'Av. Colón 1234' })
     await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
     await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
@@ -382,7 +417,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
     await user.click(screen.getByRole('button', { name: 'Aplicar ajuste' }))
 
     expect(
-      screen.getByText('Confirmás aplicar un ajuste negativo de -15%? Esto reduce el monto vigente del contrato.'),
+      screen.getByText(
+        'Confirmás aplicar un ajuste negativo de -15%? Esto reduce el monto vigente del contrato.',
+      ),
     ).toBeInTheDocument()
     expect(contractsApi.applyAdjustment).not.toHaveBeenCalled()
 

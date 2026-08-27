@@ -8,11 +8,30 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, ForbiddenState } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  ForbiddenState,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import { formatDate } from '@/shared/utils/format'
-import type { WorkOrderQuoteCreate, WorkOrderCloseRequest, WorkOrderCancelRequest } from '@/api/maintenance.api'
-import type { QuoteInput, CloseWorkOrderInput, CancelWorkOrderInput } from '../schemas/maintenance.schema'
+import type {
+  WorkOrderQuoteCreate,
+  WorkOrderCloseRequest,
+  WorkOrderCancelRequest,
+} from '@/api/maintenance.api'
+import type {
+  QuoteInput,
+  CloseWorkOrderInput,
+  CancelWorkOrderInput,
+} from '../schemas/maintenance.schema'
 import { PAYER_LABELS } from '../schemas/maintenance.schema'
 
 import { WorkOrderStatusBadge } from '../components/WorkOrderStatusBadge'
@@ -56,6 +75,8 @@ export function WorkOrderDetailPage() {
 
   const [quoteFiles, setQuoteFiles] = useState<File[]>([])
   const [quoteError, setQuoteError] = useState<unknown>(null)
+  const [isQuoteDialogOpen, setIsQuoteDialogOpen] = useState(false)
+  const [quoteSuccess, setQuoteSuccess] = useState<string | null>(null)
   const [approvingQuoteId, setApprovingQuoteId] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<unknown>(null)
   const [closeFiles, setCloseFiles] = useState<File[]>([])
@@ -98,7 +119,9 @@ export function WorkOrderDetailPage() {
           }
         }
         setQuoteFiles([])
-        workOrderQuery.refetch()
+        await workOrderQuery.refetch()
+        setIsQuoteDialogOpen(false)
+        setQuoteSuccess('Cotización cargada correctamente.')
       },
       onError: (error) => setQuoteError(error),
     })
@@ -181,7 +204,37 @@ export function WorkOrderDetailPage() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Cotizaciones</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground">Cotizaciones</h2>
+          {canQuote && canStillQuote ? (
+            <Dialog
+              open={isQuoteDialogOpen}
+              onOpenChange={(open) => {
+                setIsQuoteDialogOpen(open)
+                if (open) setQuoteError(null)
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button type="button" size="sm">
+                  Nueva cotización
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Cargar cotización</DialogTitle>
+                </DialogHeader>
+                <QuoteForm
+                  files={quoteFiles}
+                  onFilesChange={setQuoteFiles}
+                  errorMessage={quoteError ? resolveErrorMessage(quoteError) : null}
+                  isSubmitting={addQuote.isPending}
+                  onSubmit={handleAddQuote}
+                />
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </div>
+        {quoteSuccess ? <SuccessBanner message={quoteSuccess} /> : null}
         <QuotesList
           quotes={workOrder.quotes}
           attachments={workOrder.attachments}
@@ -191,15 +244,6 @@ export function WorkOrderDetailPage() {
           approveError={approveError ? resolveErrorMessage(approveError) : null}
           onApprove={handleApprove}
         />
-        {canQuote && canStillQuote ? (
-          <QuoteForm
-            files={quoteFiles}
-            onFilesChange={setQuoteFiles}
-            errorMessage={quoteError ? resolveErrorMessage(quoteError) : null}
-            isSubmitting={addQuote.isPending}
-            onSubmit={handleAddQuote}
-          />
-        ) : null}
       </section>
 
       {workOrder.status === 'closed' ? (

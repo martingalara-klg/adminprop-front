@@ -11,13 +11,7 @@
 //   account_number: 1-100 caracteres, obligatorio en cada cuenta.
 import { z } from 'zod'
 
-export const PROPERTY_TYPE_OPTIONS = [
-  'departamento',
-  'casa',
-  'local',
-  'cochera',
-  'otro',
-] as const
+export const PROPERTY_TYPE_OPTIONS = ['departamento', 'casa', 'local', 'cochera', 'otro'] as const
 
 // RF-04: `rented` es derivado — nunca se ofrece como opción manual.
 export const MANUAL_PROPERTY_STATUS_OPTIONS = ['available', 'unavailable'] as const
@@ -109,6 +103,15 @@ export type UpdateServiceAccountInput = z.infer<typeof updateServiceAccountSchem
 // propiedad — solo los 3 tipos declarados en el catálogo del backend
 // (`charges/schemas.py.ChargeType`).
 export const RECURRING_CHARGE_TYPE_OPTIONS = ['rentas', 'municipalidad', 'otro'] as const
+
+// `Record<string, string>` (no `(typeof RECURRING_CHARGE_TYPE_OPTIONS)[number]`)
+// a propósito: `PropertyRecurringCharges` indexa con `charge.charge_type`,
+// que viene de la API como `string` (no del enum acotado del form).
+export const CHARGE_TYPE_LABELS: Record<string, string> = {
+  rentas: 'Rentas',
+  municipalidad: 'Municipalidad',
+  otro: 'Otro',
+}
 
 export const createRecurringChargeSchema = z.object({
   charge_type: z.enum(RECURRING_CHARGE_TYPE_OPTIONS),

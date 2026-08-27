@@ -7,7 +7,19 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, ForbiddenState, ConfirmDeleteButton } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  ForbiddenState,
+  ConfirmDeleteButton,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { PropertyUpdate, PropertyServiceAccountCreate } from '@/api/properties.api'
 import type { CreateRecurringChargeInput } from '../schemas/property.schema'
@@ -18,6 +30,7 @@ import { ServiceAccountsList } from '../components/ServiceAccountsList'
 import { PropertyContractSummary } from '../components/PropertyContractSummary'
 import { PropertyWorkOrdersHistory } from '../components/PropertyWorkOrdersHistory'
 import { PropertyRecurringCharges } from '../components/PropertyRecurringCharges'
+import { RecurringChargeForm } from '../components/RecurringChargeForm'
 
 import { usePropertyDetail } from '../hooks/usePropertyDetail'
 import { useUpdateProperty } from '../hooks/useUpdateProperty'
@@ -61,6 +74,8 @@ export function PropertyDetailPage() {
   const [serviceAccountError, setServiceAccountError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [chargeError, setChargeError] = useState<string | null>(null)
+  const [isChargeDialogOpen, setIsChargeDialogOpen] = useState(false)
+  const [chargeSuccess, setChargeSuccess] = useState<string | null>(null)
 
   if (!canReadProperties) {
     return (
@@ -132,6 +147,10 @@ export function PropertyDetailPage() {
   function handleCreateCharge(values: CreateRecurringChargeInput) {
     setChargeError(null)
     createRecurringCharge.mutate(values, {
+      onSuccess: () => {
+        setIsChargeDialogOpen(false)
+        setChargeSuccess('Concepto recurrente agregado correctamente.')
+      },
       onError: (error) => setChargeError(resolveErrorMessage(error)),
     })
   }
@@ -194,13 +213,38 @@ export function PropertyDetailPage() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Conceptos de cargos recurrentes</h2>
-        <PropertyRecurringCharges
-          charges={recurringCharges}
-          errorMessage={chargeError}
-          isSubmitting={createRecurringCharge.isPending}
-          onSubmit={handleCreateCharge}
-        />
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Conceptos de cargos recurrentes
+          </h2>
+          {canManageProperties ? (
+            <Dialog
+              open={isChargeDialogOpen}
+              onOpenChange={(open) => {
+                setIsChargeDialogOpen(open)
+                if (open) setChargeError(null)
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button type="button" size="sm">
+                  Nuevo concepto
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nuevo concepto recurrente</DialogTitle>
+                </DialogHeader>
+                <RecurringChargeForm
+                  errorMessage={chargeError}
+                  isSubmitting={createRecurringCharge.isPending}
+                  onSubmit={handleCreateCharge}
+                />
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </div>
+        {chargeSuccess ? <SuccessBanner message={chargeSuccess} /> : null}
+        <PropertyRecurringCharges charges={recurringCharges} />
       </section>
 
       {canManageProperties ? (
