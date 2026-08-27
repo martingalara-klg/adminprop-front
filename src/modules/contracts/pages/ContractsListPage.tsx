@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
+import { AdminPropApiError } from '@/api/errors'
 import {
   Spinner,
   ErrorState,
@@ -37,6 +38,13 @@ export function ContractsListPage() {
 
   const [expiringInDays, setExpiringInDays] = useState('')
   const [createError, setCreateError] = useState<unknown>(null)
+  // Issue #50 — VALIDATION_ERROR/INVALID_DATE_RANGE con `error.field`
+  // (`current_amount`/`current_amount_since`) se propaga como error
+  // inline del form, además del banner genérico (`createError`).
+  const [createFieldError, setCreateFieldError] = useState<{
+    field: string
+    message: string
+  } | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
@@ -62,6 +70,7 @@ export function ContractsListPage() {
 
   function handleCreate(values: CreateContractInput) {
     setCreateError(null)
+    setCreateFieldError(null)
     createContract.mutate(
       {
         property_id: values.property_id,
@@ -84,6 +93,18 @@ export function ContractsListPage() {
             ? values.adjustment_index_notes
             : undefined,
         notes: values.notes || undefined,
+        // Issue #50 (espejo de back#100, RN-08/RN-C06): sólo se envían
+        // si el toggle "en curso" está activo — `is_in_progress` es
+        // puramente de UI y nunca viaja al backend. La fecha se captura
+        // como mes ("YYYY-MM") y se normaliza a día 1 acá (el back
+        // también normaliza, pero enviarla ya normalizada evita
+        // ambigüedad — sdd_03 §8).
+        current_amount:
+          values.is_in_progress && values.current_amount ? values.current_amount : undefined,
+        current_amount_since:
+          values.is_in_progress && values.current_amount_since
+            ? `${values.current_amount_since}-01`
+            : undefined,
       },
       {
         onSuccess: () => {
@@ -93,7 +114,16 @@ export function ContractsListPage() {
         // El modal queda abierto en error (CA-03-02: 409 CONTRACT_OVERLAP
         // ofrece un link al contrato en conflicto que el usuario necesita
         // poder ver/clickear sin perder el form).
-        onError: (error) => setCreateError(error),
+        onError: (error) => {
+          setCreateError(error)
+          if (
+            error instanceof AdminPropApiError &&
+            error.field &&
+            (error.code === 'VALIDATION_ERROR' || error.code === 'INVALID_DATE_RANGE')
+          ) {
+            setCreateFieldError({ field: error.field, message: error.message })
+          }
+        },
       },
     )
   }
@@ -110,7 +140,10 @@ export function ContractsListPage() {
             open={isCreateOpen}
             onOpenChange={(open) => {
               setIsCreateOpen(open)
-              if (open) setCreateError(null)
+              if (open) {
+                setCreateError(null)
+                setCreateFieldError(null)
+              }
             }}
           >
             <DialogTrigger asChild>
@@ -126,6 +159,7 @@ export function ContractsListPage() {
                 errorMessage={null}
                 isSubmitting={createContract.isPending}
                 onSubmit={handleCreate}
+                serverFieldError={createFieldError}
               />
               {createError ? <ContractOverlapError error={createError} /> : null}
             </DialogContent>

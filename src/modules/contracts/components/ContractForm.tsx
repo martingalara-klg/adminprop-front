@@ -3,6 +3,12 @@
 // RF-02 + CA-03-01/02/03: alta de contrato ARS/USD. RN-C: USD no ajusta
 // — el form oculta dinámicamente frecuencia/índice/notas cuando la
 // moneda elegida es USD (no sólo los deshabilita: no se muestran).
+//
+// Issue #50 (espejo de back#100, RN-08/RN-C06): toggle "El contrato ya
+// está en curso" — despliega `current_amount` (monto vigente hoy) +
+// `current_amount_since` (mes desde el que rige). Aplica a ARS y USD por
+// igual (CA-03-13) — vive fuera del bloque condicional de ajuste ARS.
+import { useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, Input, Label, MoneyInput } from '@/shared/components'
@@ -21,15 +27,29 @@ type Props = {
   errorMessage: string | null
   isSubmitting: boolean
   onSubmit: (values: CreateContractInput) => void
+  /**
+   * Issue #50 — error field-level del backend (`VALIDATION_ERROR` /
+   * `INVALID_DATE_RANGE` con `error.field`, sdd_03 §8) a mapear como
+   * error inline de React Hook Form (error-handling.md §"Field-level").
+   */
+  serverFieldError?: { field: string; message: string } | null
 }
 
-export function ContractForm({ properties, renters, errorMessage, isSubmitting, onSubmit }: Props) {
+export function ContractForm({
+  properties,
+  renters,
+  errorMessage,
+  isSubmitting,
+  onSubmit,
+  serverFieldError,
+}: Props) {
   const {
     register,
     control,
     handleSubmit,
     reset,
     watch,
+    setError,
     formState: { errors },
   } = useForm<CreateContractInput>({
     resolver: zodResolver(createContractSchema),
@@ -45,12 +65,24 @@ export function ContractForm({ properties, renters, errorMessage, isSubmitting, 
       adjustment_index: '',
       adjustment_index_notes: '',
       notes: '',
+      is_in_progress: false,
+      current_amount: '',
+      current_amount_since: '',
     },
   })
 
   const currency = watch('currency')
   const adjustmentIndex = watch('adjustment_index')
+  const isInProgress = watch('is_in_progress')
   const isArs = currency === 'ARS'
+
+  useEffect(() => {
+    if (!serverFieldError) return
+    setError(serverFieldError.field as keyof CreateContractInput, {
+      type: 'server',
+      message: serverFieldError.message,
+    })
+  }, [serverFieldError, setError])
 
   return (
     <form
@@ -168,6 +200,67 @@ export function ContractForm({ properties, renters, errorMessage, isSubmitting, 
           <p className="text-sm text-destructive" role="alert">
             {errors.end_date.message}
           </p>
+        ) : null}
+      </div>
+
+      {/* Issue #50 (espejo de back#100, RN-08/RN-C06): alta de contrato
+          en curso — aplica a ARS y USD por igual (CA-03-13), vive fuera
+          del bloque condicional de ajuste ARS. */}
+      <div className="flex flex-col gap-3 rounded-md border border-dashed p-3">
+        <div className="flex items-center gap-2">
+          <input
+            id="contract-is-in-progress"
+            type="checkbox"
+            className="h-4 w-4 rounded border-input"
+            {...register('is_in_progress')}
+          />
+          <Label htmlFor="contract-is-in-progress">El contrato ya está en curso</Label>
+        </div>
+
+        {isInProgress ? (
+          <>
+            <p className="text-xs text-muted-foreground">
+              El mes actual nace con este monto vigente; el próximo aumento por índice se
+              cuenta desde esta fecha, no desde el inicio del contrato.
+            </p>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="contract-current-amount">Monto vigente hoy</Label>
+              <Controller
+                control={control}
+                name="current_amount"
+                render={({ field }) => (
+                  <MoneyInput
+                    id="contract-current-amount"
+                    aria-invalid={!!errors.current_amount}
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
+                )}
+              />
+              {errors.current_amount ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {errors.current_amount.message}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="contract-current-amount-since">Desde cuándo rige</Label>
+              <Input
+                id="contract-current-amount-since"
+                type="month"
+                aria-invalid={!!errors.current_amount_since}
+                {...register('current_amount_since')}
+              />
+              {errors.current_amount_since ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {errors.current_amount_since.message}
+                </p>
+              ) : null}
+            </div>
+          </>
         ) : null}
       </div>
 
