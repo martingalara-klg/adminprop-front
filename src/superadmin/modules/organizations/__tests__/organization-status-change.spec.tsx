@@ -114,8 +114,10 @@ describe('RF-05 — Deshabilitación / habilitación de organización', () => {
     await user.click(screen.getByRole('button', { name: 'Confirmar deshabilitación' }))
 
     await waitFor(() => {
+      // issue #45: copy actualizado -- ya no promete una notificación que
+      // hoy no existe (mapa central error-codes.es-AR.ts).
       expect(
-        screen.getByText('Ocurrió un error inesperado. El equipo fue notificado.'),
+        screen.getByText('Ocurrió un error inesperado. Reintentá en unos minutos.'),
       ).toBeInTheDocument()
     })
   })
