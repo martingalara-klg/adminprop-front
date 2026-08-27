@@ -275,7 +275,108 @@ No hay ambientes remotos (`staging`/`production`) todavía — sin infra cloud, 
 
 ---
 
-## 10. Próximos pasos
+## 11. Imagen de producción (Docker + Caddy) — issue #43
+
+Railway (y cualquier ambiente que despliegue el front como contenedor)
+sirve el build estático **y** reenvía `/v1/*` a la API por el mismo
+origen — necesario porque las cookies de sesión del backend son
+`SameSite=Lax` (decisión #43 del SDD; nota de despliegue agregada por
+adminprop-back#90 en `sdd_04` §2) y no viajan entre subdominios distintos
+de Railway.
+
+### 11.1 Qué hace la imagen
+
+- **Etapa 1** (`node:20-alpine`): `npm ci && npm run build` con
+  `VITE_API_BASE_URL=/v1` (relativo — el bundle pega contra el proxy, no
+  contra un host absoluto).
+- **Etapa 2** (`caddy:2-alpine`): sirve `dist/` con fallback SPA
+  (`try_files {path} /index.html`) y reenvía `/v1/*` al upstream de la API
+  (`reverse_proxy /v1/* {$API_UPSTREAM}`, **sin default hardcodeado a
+  producción** — en local cae en `http://localhost:8000`).
+- Caddy escucha en `{$PORT:80}` (Railway inyecta `PORT`; local usa 80 por
+  default salvo que se pase `-e PORT=...`).
+- El `Caddyfile` envuelve `reverse_proxy` + `try_files` + `file_server` en
+  un bloque `route { ... }` para forzar orden de ejecución por posición en
+  el archivo — el orden default de directivas de Caddy corre
+  `try_files`/`file_server` **antes** que `reverse_proxy`, lo que
+  reescribía cualquier request a `/v1/*` hacia `/index.html` antes de que
+  el proxy la viera (reproducido localmente: `POST /v1/auth/login`
+  devolvía `405 Method Not Allowed` de `file_server` en vez de llegar a la
+  API). Con `route`, `reverse_proxy` corre primero y es terminal para lo
+  que matchea `/v1/*`.
+
+### 11.2 Build
+
+```bash
+docker build -t adminprop-front:local .
+```
+
+### 11.3 Correr contra el backend del compose de `adminprop-back`
+
+El backend local (`adminprop-back/docker/docker-compose.yml`, `make up`)
+crea la red `adminprop-back_default` con el servicio API accesible como
+`adminprop-back-api-1` (nombre del contenedor) puerto `8000`.
+
+```bash
+# 1. Backend arriba (desde adminprop-back)
+cd ../adminprop-back
+make up
+
+# 2. Front en la misma red del compose del back
+cd ../adminprop-front
+docker run -d --name adminprop-front-local \
+  --network adminprop-back_default \
+  -e API_UPSTREAM=http://adminprop-back-api-1:8000 \
+  -e PORT=8080 \
+  -p 18080:8080 \
+  adminprop-front:local
+```
+
+### 11.4 Verificar
+
+```bash
+# (a) SPA index
+curl -i http://localhost:18080/
+
+# (b) fallback SPA en ruta profunda (debe devolver el mismo index.html)
+curl -i http://localhost:18080/contracts/algo/profundo
+
+# (c) el proxy atraviesa hasta la API real (Set-Cookie visible en login OK)
+curl -i -X POST http://localhost:18080/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"<email>","password":"<password>"}'
+```
+
+En `(c)`, un login exitoso responde `Set-Cookie: access_token=...;
+HttpOnly; SameSite=lax; Secure` y `Set-Cookie: refresh_token=...` —
+confirma mismo-origen: el browser los acepta porque `access_token`/
+`refresh_token` vienen del mismo host que sirvió el HTML.
+
+### 11.5 Bajar todo
+
+```bash
+docker rm -f adminprop-front-local
+cd ../adminprop-back && make down
+```
+
+### 11.6 Variables relevantes
+
+| Variable | Dónde se usa | Default |
+|---|---|---|
+| `API_UPSTREAM` | `Caddyfile` — upstream del reverse proxy `/v1/*` | `http://localhost:8000` (solo dev; en Railway se pasa el host interno real del servicio API) |
+| `PORT` | `Caddyfile` — puerto de escucha de Caddy | `80` (Railway lo inyecta en runtime) |
+| `VITE_API_BASE_URL` | Build de Vite (etapa 1 del `Dockerfile`) | Fijo en `/v1` dentro del `Dockerfile` — no se pasa en runtime, es build-time |
+
+### 11.7 CI
+
+`.github/workflows/ci.yml` job `docker-build` corre `docker build .` en
+cada PR/push a `develop` — solo valida que la imagen buildea (no la
+corre ni verifica contra un backend real; esa verificación es manual,
+descripta arriba).
+
+---
+
+## 12. Próximos pasos
 
 1. Leer [`docs/prompts/session-start.md`](../prompts/session-start.md) para iniciar la primera sesión.
 2. Leer los SDDs del módulo en el que vas a trabajar (`docs/sdd/`).
