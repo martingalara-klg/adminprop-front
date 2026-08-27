@@ -75,4 +75,60 @@ describe('UC-06 — Guard de /superadmin/* (#6)', () => {
       expect(screen.getByRole('heading', { name: 'Organizaciones' })).toBeInTheDocument()
     })
   })
+
+  it('CA-45-02: un Super Admin que navega a "/superadmin" (sin subpath) ve contenido, no una página en blanco', async () => {
+    // issue #45 (síntoma 2, ambiente real): sin index route bajo
+    // /superadmin, este path no matcheaba ningún hijo -- el <Outlet/> de
+    // RequireSuperAdmin renderizaba nada. Reproduce el destino exacto al
+    // que navega LoginPage tras un login de Super Admin.
+    useSessionStore.setState({
+      session: buildSession({
+        userId: 'sa-1',
+        email: 'sa@adminprop.com',
+        fullName: 'Super Admin',
+        organization: null,
+        permissions: [],
+        isSuperAdmin: true,
+      }),
+      logoutReason: null,
+      isBootstrapping: false,
+    })
+
+    renderApp('/superadmin')
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Organizaciones' })).toBeInTheDocument()
+    })
+  })
+
+  it('CA-45-03: recarga completa en "/superadmin" (bootstrap desde cero) resuelve a contenido tras /auth/me', async () => {
+    // issue #45 (síntoma 2): una recarga de página arranca con
+    // isBootstrapping=true y session=null hasta que useSessionBootstrap
+    // resuelve GET /auth/me -- verifica que, una vez resuelto con una
+    // sesión de Super Admin (mismo shape que get_current_session en el
+    // backend: organization null, is_super_admin true), "/superadmin"
+    // termina mostrando contenido y no queda en blanco.
+    useSessionStore.setState({ session: null, logoutReason: null, isBootstrapping: true })
+
+    renderApp('/superadmin')
+
+    expect(screen.getByText('Cargando sesión...')).toBeInTheDocument()
+
+    useSessionStore.setState({
+      session: buildSession({
+        userId: 'sa-1',
+        email: 'sa@adminprop.com',
+        fullName: 'Super Admin',
+        organization: null,
+        permissions: [],
+        isSuperAdmin: true,
+      }),
+      logoutReason: null,
+      isBootstrapping: false,
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Organizaciones' })).toBeInTheDocument()
+    })
+  })
 })
