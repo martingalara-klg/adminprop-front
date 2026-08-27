@@ -6,9 +6,9 @@
 // ALREADY_EXISTS si se reintenta sobre uno ya cargado) y corrección
 // inline del importe ya cargado (`PATCH /charge-entries/:id`, RN-D04).
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Input, EmptyState } from '@/shared/components'
+import { Button, EmptyState, MoneyInput } from '@/shared/components'
 import { formatMoney } from '@/shared/utils/format'
 import type { ChargeVerificationItem } from '@/api/charges.api'
 import { chargeEntrySchema, type ChargeEntryInput } from '../schemas/settlement.schema'
@@ -39,7 +39,7 @@ function ChargeEntryInlineForm({
   onSubmit: (values: ChargeEntryInput) => void
   submitLabel: string
 }) {
-  const { register, handleSubmit } = useForm<ChargeEntryInput>({
+  const { control, handleSubmit } = useForm<ChargeEntryInput>({
     resolver: zodResolver(chargeEntrySchema),
     defaultValues: { amount: defaultAmount ?? '', notes: '' },
   })
@@ -50,11 +50,19 @@ function ChargeEntryInlineForm({
       onSubmit={handleSubmit(onSubmit)}
       noValidate
     >
-      <Input
-        aria-label="Importe"
-        className="w-32"
-        placeholder="Importe"
-        {...register('amount')}
+      <Controller
+        control={control}
+        name="amount"
+        render={({ field }) => (
+          <MoneyInput
+            aria-label="Importe"
+            className="w-32"
+            placeholder="Importe"
+            value={field.value}
+            onChange={field.onChange}
+            onBlur={field.onBlur}
+          />
+        )}
       />
       <Button type="submit" size="sm" disabled={isSubmitting}>
         {isSubmitting ? 'Guardando…' : submitLabel}
