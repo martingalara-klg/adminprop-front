@@ -10,7 +10,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 
 import { MaintenanceListPage } from '../pages/MaintenanceListPage'
-import { WorkOrderCreatePage } from '../pages/WorkOrderCreatePage'
 import { WorkOrderDetailPage } from '../pages/WorkOrderDetailPage'
 
 export function renderMaintenanceApp(initialPath: string): ReturnType<typeof render> {
@@ -23,7 +22,6 @@ export function renderMaintenanceApp(initialPath: string): ReturnType<typeof ren
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/maintenance" element={<MaintenanceListPage />} />
-          <Route path="/maintenance/new" element={<WorkOrderCreatePage />} />
           <Route path="/maintenance/:workOrderId" element={<WorkOrderDetailPage />} />
         </Routes>
       </MemoryRouter>
