@@ -131,6 +131,9 @@ describe('Módulo 2 — Personas (#9)', () => {
     renderPeopleApp('/people')
     const user = userEvent.setup()
 
+    // Issue #48: el form de alta vive en un modal — se abre desde el
+    // botón "Nuevo propietario" del listado.
+    await user.click(await screen.findByRole('button', { name: 'Nuevo propietario' }))
     await waitFor(() => screen.getByLabelText('Nombre'))
     await user.type(screen.getByLabelText('Nombre'), 'Juan Pérez')
     await user.type(screen.getByLabelText('% de comisión'), '10')
@@ -155,9 +158,7 @@ describe('Módulo 2 — Personas (#9)', () => {
     await waitFor(() => screen.getByTestId('landlord-commission-readonly'))
     expect(screen.getByTestId('landlord-commission-readonly')).toHaveTextContent('10%')
     expect(screen.queryByLabelText('% de comisión')).not.toBeInTheDocument()
-    expect(
-      screen.getByText('Solo el owner puede cambiar el % de comisión.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Solo el owner puede cambiar el % de comisión.')).toBeInTheDocument()
     // Datos de contacto SÍ son editables por el admin.
     expect(screen.getByLabelText('Nombre')).toBeEnabled()
     unmount()
