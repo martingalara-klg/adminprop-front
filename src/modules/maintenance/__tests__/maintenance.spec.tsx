@@ -88,6 +88,7 @@ const PROPERTY_OPTIONS = {
       id: 'p-1',
       address: 'Av. Colón 1234',
       landlord_id: 'l-1',
+      neighborhood_id: null,
       property_type: 'departamento',
       status: 'available',
       created_at: '2026-08-01T00:00:00Z',

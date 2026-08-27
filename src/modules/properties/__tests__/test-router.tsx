@@ -11,6 +11,7 @@ import { render } from '@testing-library/react'
 
 import { PropertiesListPage } from '../pages/PropertiesListPage'
 import { PropertyDetailPage } from '../pages/PropertyDetailPage'
+import { NeighborhoodsPage } from '../pages/NeighborhoodsPage'
 
 export function renderPropertiesApp(initialPath: string): ReturnType<typeof render> {
   const queryClient = new QueryClient({
@@ -22,6 +23,10 @@ export function renderPropertiesApp(initialPath: string): ReturnType<typeof rend
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/properties" element={<PropertiesListPage />} />
+          {/* issue #99 (back) / #49 (front): ABM de barrios — declarada
+              antes de ':propertyId' para que no la capture el param
+              dinámico, mismo orden que routes.tsx. */}
+          <Route path="/properties/neighborhoods" element={<NeighborhoodsPage />} />
           <Route path="/properties/:propertyId" element={<PropertyDetailPage />} />
         </Routes>
       </MemoryRouter>
