@@ -606,6 +606,40 @@ describe('Módulo 1 — Propiedades (#10)', () => {
         expect.objectContaining({ neighborhood_id: 'n-1' }),
       )
     })
+    // Seguimiento crítico: el backend APLICA el `status` que llega en el
+    // PATCH (no lo ignora) — para una propiedad `rented`, el form NUNCA
+    // debe mandar `status` (rompería `rented ⟺ contrato activo`, RF-04).
+    // El PATCH es parcial: omitir el campo = "no tocar el estado".
+    expect(propertiesApi.update).toHaveBeenCalledWith(
+      'p-1',
+      expect.not.objectContaining({ status: expect.anything() }),
+    )
+  })
+
+  it('CA-55-05: en una propiedad NO alquilada, cambiar el estado manual sí viaja en el PATCH', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.get).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, status: 'available' },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByLabelText('Estado'))
+    await user.selectOptions(screen.getByLabelText('Estado'), 'unavailable')
+
+    vi.mocked(propertiesApi.update).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, status: 'unavailable' },
+    })
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() => {
+      expect(propertiesApi.update).toHaveBeenCalledWith(
+        'p-1',
+        expect.objectContaining({ status: 'unavailable' }),
+      )
+    })
   })
 
   it('CA-55-01: el listado muestra el tipo capitalizado y el select de alta incluye Duplex', async () => {
