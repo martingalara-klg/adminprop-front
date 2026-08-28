@@ -8,8 +8,12 @@
 //   POST /rent-periods/:id/payments            (registrar cobro — RN-P04/P05/P06/P07)
 //   POST /payments/:id/void                    (anulación lógica con motivo — RN-D04)
 //   GET  /payments/:id/receipt                 (descarga PDF del recibo — RF-07)
-//   POST /renters/:id/debt-certificate         (descarga PDF del libre deuda — RF-08)
 //   GET  /debt                                 (?landlord_id=&renter_id=&min_days= — estado de deuda global, RF-06)
+//
+// Issue #104/#56: `POST /renters/:id/debt-certificate` (RF-08) fue
+// ELIMINADO del backend — el libre deuda pasó a ser por CONTRATO
+// (`POST /contracts/:id/debt-certificate`, ver `contracts.api.ts`). No
+// reintroducir este endpoint acá.
 //
 // No existe `GET /payments` en sdd_03 §9: `GET /rent-periods/:id` (v1.7)
 // es la única vía para conocer el `id` de cobros previos — por eso el
@@ -136,13 +140,5 @@ export const paymentsApi = {
   /** CA-04-10: sobre un cobro anulado, el backend responde 422 BUSINESS_RULE_VIOLATION (RN-P08). */
   async downloadReceipt(paymentId: string): Promise<void> {
     await downloadFile(`/payments/${paymentId}/receipt`, `recibo-${paymentId}.pdf`)
-  },
-
-  // ── RF-08 — Certificado de libre deuda (Fetch + Blob, POST) ──────────────
-  /** CA-04-11/12: `422 RENTER_HAS_DEBT` con el detalle de lo adeudado en `details` (RN-P08). */
-  async downloadDebtCertificate(renterId: string): Promise<void> {
-    await downloadFile(`/renters/${renterId}/debt-certificate`, `libre-deuda-${renterId}.pdf`, {
-      method: 'POST',
-    })
   },
 }
