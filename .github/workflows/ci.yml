@@ -56,6 +56,17 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         run: npm run lint
 
+      - name: Check circular imports
+        # issue #23 -- prevención estructural del ciclo http-client.ts ⇄
+        # auth.api.ts (issue #21) reapareciendo. `eslint-plugin-import`
+        # (import/no-cycle) no se pudo wirear en .eslintrc.cjs en esta
+        # sesión (config protegida por hook local del agente, no una
+        # restricción del repo) -- alternativa elegida: `madge --circular`
+        # como devDependency pinneada (package.json), corrida acá en CI
+        # sobre TODO `src/` en cada PR/push a develop.
+        if: steps.guard.outputs.skip != 'true'
+        run: npm run check:cycles
+
       - name: Typecheck
         if: steps.guard.outputs.skip != 'true'
         run: npm run typecheck
