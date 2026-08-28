@@ -44,6 +44,8 @@ export type PropertyListFilters = {
   cursor?: string
   limit?: number
   landlord_id?: string
+  // issue #99 (back) / #49 (front): filtro adicional por barrio.
+  neighborhood_id?: string
   status?: 'available' | 'rented' | 'unavailable'
   property_type?: string
   search?: string

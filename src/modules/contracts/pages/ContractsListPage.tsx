@@ -6,7 +6,22 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState, ForbiddenState, Input, Label } from '@/shared/components'
+import { AdminPropApiError } from '@/api/errors'
+import {
+  Spinner,
+  ErrorState,
+  EmptyState,
+  ForbiddenState,
+  Input,
+  Label,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import type { CreateContractInput } from '../schemas/contract.schema'
 
 import { ContractsTable } from '../components/ContractsTable'
@@ -23,6 +38,15 @@ export function ContractsListPage() {
 
   const [expiringInDays, setExpiringInDays] = useState('')
   const [createError, setCreateError] = useState<unknown>(null)
+  // Issue #50 — VALIDATION_ERROR/INVALID_DATE_RANGE con `error.field`
+  // (`current_amount`/`current_amount_since`) se propaga como error
+  // inline del form, además del banner genérico (`createError`).
+  const [createFieldError, setCreateFieldError] = useState<{
+    field: string
+    message: string
+  } | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
   const appliedExpiringInDays =
     expiringInDays && !Number.isNaN(Number(expiringInDays)) ? Number(expiringInDays) : undefined
@@ -46,6 +70,28 @@ export function ContractsListPage() {
 
   function handleCreate(values: CreateContractInput) {
     setCreateError(null)
+    setCreateFieldError(null)
+
+    const adjustmentFrequencyMonths =
+      values.currency === 'ARS' && values.adjustment_frequency_months
+        ? Number(values.adjustment_frequency_months)
+        : undefined
+
+    // Issue #57 (espejo de back#107, RN-C06 v2): con frecuencia de
+    // ajuste se envía `historical_amounts[]` (tramos transcurridos);
+    // sin frecuencia sigue el mecanismo de #50
+    // (`current_amount`/`current_amount_since`) — mutuamente
+    // excluyentes, sdd_03 §8.
+    const usesTramos = !!adjustmentFrequencyMonths
+    // Zod ya validó (superRefine) que ningún tramo quede vacío antes de
+    // llegar acá — el `.filter` sólo achica el tipo para el payload
+    // (`historical_amounts` puede tener huecos `undefined` a nivel de
+    // tipo de RHF mientras el usuario todavía está completando el form).
+    const historicalAmounts =
+      values.is_in_progress && usesTramos && values.historical_amounts?.length
+        ? values.historical_amounts.filter((value): value is string => !!value)
+        : undefined
+
     createContract.mutate(
       {
         property_id: values.property_id,
@@ -55,19 +101,51 @@ export function ContractsListPage() {
         start_date: values.start_date,
         end_date: values.end_date,
         daily_late_fee_pct: values.daily_late_fee_pct,
-        adjustment_frequency_months:
-          values.currency === 'ARS' && values.adjustment_frequency_months
-            ? Number(values.adjustment_frequency_months)
-            : undefined,
+        adjustment_frequency_months: adjustmentFrequencyMonths,
         adjustment_index:
-          values.currency === 'ARS' && values.adjustment_index ? values.adjustment_index : undefined,
+          values.currency === 'ARS' && values.adjustment_index
+            ? values.adjustment_index
+            : undefined,
         adjustment_index_notes:
           values.currency === 'ARS' && values.adjustment_index_notes
             ? values.adjustment_index_notes
             : undefined,
         notes: values.notes || undefined,
+        // Issue #50 (espejo de back#100, RN-08/RN-C06): sólo se envían
+        // si el toggle "en curso" está activo Y no corresponde el
+        // mecanismo de tramos del #57. La fecha se captura como mes
+        // ("YYYY-MM") y se normaliza a día 1 acá (el back también
+        // normaliza, pero enviarla ya normalizada evita ambigüedad —
+        // sdd_03 §8).
+        current_amount:
+          values.is_in_progress && !usesTramos && values.current_amount
+            ? values.current_amount
+            : undefined,
+        current_amount_since:
+          values.is_in_progress && !usesTramos && values.current_amount_since
+            ? `${values.current_amount_since}-01`
+            : undefined,
+        historical_amounts: historicalAmounts,
       },
-      { onError: (error) => setCreateError(error) },
+      {
+        onSuccess: () => {
+          setIsCreateOpen(false)
+          setCreateSuccess('Contrato creado correctamente.')
+        },
+        // El modal queda abierto en error (CA-03-02: 409 CONTRACT_OVERLAP
+        // ofrece un link al contrato en conflicto que el usuario necesita
+        // poder ver/clickear sin perder el form).
+        onError: (error) => {
+          setCreateError(error)
+          if (
+            error instanceof AdminPropApiError &&
+            error.field &&
+            (error.code === 'VALIDATION_ERROR' || error.code === 'INVALID_DATE_RANGE')
+          ) {
+            setCreateFieldError({ field: error.field, message: error.message })
+          }
+        },
+      },
     )
   }
 
@@ -76,8 +154,38 @@ export function ContractsListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
+      <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Contratos</h1>
+        {canManageContracts ? (
+          <Dialog
+            open={isCreateOpen}
+            onOpenChange={(open) => {
+              setIsCreateOpen(open)
+              if (open) {
+                setCreateError(null)
+                setCreateFieldError(null)
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button">Nuevo contrato</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nuevo contrato</DialogTitle>
+              </DialogHeader>
+              <ContractForm
+                properties={properties}
+                renters={renters}
+                errorMessage={null}
+                isSubmitting={createContract.isPending}
+                onSubmit={handleCreate}
+                serverFieldError={createFieldError}
+              />
+              {createError ? <ContractOverlapError error={createError} /> : null}
+            </DialogContent>
+          </Dialog>
+        ) : null}
       </header>
 
       {canManageContracts ? (
@@ -88,6 +196,8 @@ export function ContractsListPage() {
           Ir a la bandeja de ajustes
         </Link>
       ) : null}
+
+      {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
 
       <section className="flex flex-col gap-2">
         <Label htmlFor="contracts-expiring-filter">Vencen dentro de (días)</Label>
@@ -110,19 +220,6 @@ export function ContractsListPage() {
           <ContractsTable contracts={contractsQuery.data.data} />
         ) : null}
       </section>
-
-      {canManageContracts ? (
-        <section className="flex flex-col gap-2">
-          <ContractForm
-            properties={properties}
-            renters={renters}
-            errorMessage={null}
-            isSubmitting={createContract.isPending}
-            onSubmit={handleCreate}
-          />
-          {createError ? <ContractOverlapError error={createError} /> : null}
-        </section>
-      ) : null}
     </div>
   )
 }

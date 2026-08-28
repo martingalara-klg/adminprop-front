@@ -737,37 +737,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/renters/{renter_id}/debt-certificate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Issue Debt Certificate
-         * @description sdd_03 §9 + RF-08: emite el certificado de libre deuda en PDF
-         *     (SINCRONICO) -- CA-04-11 (sin deuda, auditado como
-         *     `debt_certificate.issued`), CA-04-12 (con deuda -> `422
-         *     RENTER_HAS_DEBT` con el detalle en `details`, RN-P08).
-         *
-         *     Permiso `renter:read` (mismo criterio que `GET /renters/:id/debt`,
-         *     issue #23: emitir el certificado es una operacion de lectura/reporte
-         *     sobre el inquilino, no modifica sus datos).
-         *
-         *     `DebtCertificateService`/`ContractRepository`/`PropertyRepository`
-         *     se importan DIFERIDO -- mismo ciclo de import documentado en
-         *     `get_renter_debt` de este archivo.
-         */
-        post: operations["issue_debt_certificate_v1_renters__renter_id__debt_certificate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/properties": {
         parameters: {
             query?: never;
@@ -777,8 +746,9 @@ export interface paths {
         };
         /**
          * List Properties
-         * @description RF-01: "Listado con filtros: propietario, estado, tipo; busqueda
-         *     por direccion". CA-01-01: la propiedad creada aparece aca.
+         * @description RF-01: "Listado con filtros: propietario, estado, tipo, barrio
+         *     (issue #99); busqueda por direccion". CA-01-01: la propiedad creada
+         *     aparece aca. CA-01-09: filtro `?neighborhood_id=`.
          */
         get: operations["list_properties_v1_properties_get"];
         put?: never;
@@ -786,6 +756,7 @@ export interface paths {
          * Create Property
          * @description RF-01 + CA-01-01: crea una propiedad con direccion, propietario y
          *     tipo -- `landlord_id` validado contra el mismo tenant (RN-D01).
+         *     Issue #99 + CA-01-08: `neighborhood_id` obligatorio, mismo criterio.
          */
         post: operations["create_property_v1_properties_post"];
         delete?: never;
@@ -805,7 +776,8 @@ export interface paths {
          * Get Property
          * @description RF-03 + CA-01-02: ficha consolidada -- datos + cuentas de servicio
          *     juntas. `active_contract`/historial/conceptos: ver docstring de
-         *     `PropertyDetail`.
+         *     `PropertyDetail`. `neighborhood` (issue #99, CA-01-08): `None` para
+         *     propiedades legacy sin barrio.
          */
         get: operations["get_property_v1_properties__property_id__get"];
         put?: never;
@@ -823,6 +795,7 @@ export interface paths {
          * Update Property
          * @description RF-01: PATCH parcial -- todos los campos salvo `status="rented"`
          *     (rechazado por Pydantic, RF-04). Cambio de `landlord_id` auditado.
+         *     `neighborhood_id` (issue #99): editable, pero no puede vaciarse.
          */
         patch: operations["update_property_v1_properties__property_id__patch"];
         trace?: never;
@@ -877,6 +850,56 @@ export interface paths {
         patch: operations["update_service_account_v1_service_accounts__service_account_id__patch"];
         trace?: never;
     };
+    "/v1/neighborhoods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Neighborhoods
+         * @description RF-05: catalogo completo de la organizacion, sin paginacion.
+         */
+        get: operations["list_neighborhoods_v1_neighborhoods_get"];
+        put?: never;
+        /**
+         * Create Neighborhood
+         * @description RF-05 + CA-01-07: alta de barrio; `name` unico por organizacion
+         *     (case-insensitive) -- `409 CONFLICT` si ya existe.
+         */
+        post: operations["create_neighborhood_v1_neighborhoods_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/neighborhoods/{neighborhood_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Neighborhood
+         * @description RF-05 + CA-01-07: baja logica; `409 ENTITY_HAS_DEPENDENCIES` si
+         *     tiene propiedades asociadas.
+         */
+        delete: operations["delete_neighborhood_v1_neighborhoods__neighborhood_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Neighborhood
+         * @description RF-05 + CA-01-07: rename del barrio.
+         */
+        patch: operations["update_neighborhood_v1_neighborhoods__neighborhood_id__patch"];
+        trace?: never;
+    };
     "/v1/contracts": {
         parameters: {
             query?: never;
@@ -895,6 +918,11 @@ export interface paths {
          * Create Contract
          * @description RF-02 + CA-03-01/02/03: crea un contrato -- nace en `draft` (RN-02).
          *     `property_id`/`renter_id` validados contra el mismo tenant (RN-06/RN-D01).
+         *     RN-08/RN-C06 v2 (issue #107): `historical_amounts[]` (con
+         *     `adjustment_frequency_months`) o `current_amount`/`current_amount_since`
+         *     (sin frecuencia, comportamiento del issue #100) -- `actor_user_id`
+         *     (`payload.sub`) es quien queda como `applied_by` del/los ajuste(s)
+         *     sintetico(s) de carga inicial, si corresponde.
          */
         post: operations["create_contract_v1_contracts_post"];
         delete?: never;
@@ -912,7 +940,9 @@ export interface paths {
         };
         /**
          * Get Contract
-         * @description RF-01: detalle del contrato.
+         * @description RF-01 + RF-06 (issue #106): detalle del contrato, incluido
+         *     `monthly_amounts[]` -- serie mensual de valores locativos, orden
+         *     DESCENDENTE (mes actual primero), calculada en el backend.
          */
         get: operations["get_contract_v1_contracts__contract_id__get"];
         put?: never;
@@ -986,6 +1016,43 @@ export interface paths {
         get: operations["list_contract_adjustments_v1_contracts__contract_id__adjustments_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/contracts/{contract_id}/debt-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Contract Debt Certificate
+         * @description sdd_03 §8 + RF-08 (issue #104 -- movido desde `modules/people`,
+         *     decision del PO: el libre deuda es POR CONTRATO): emite el
+         *     certificado de libre deuda en PDF (SINCRONICO) -- CA-04-11 (sin
+         *     deuda, auditado como `debt_certificate.issued`), CA-04-12 (con
+         *     deuda -> `422 CONTRACT_HAS_DEBT` con el detalle en `details`, RN-P08).
+         *     Verifica SOLO los periodos de ESTE contrato -- no los de otros
+         *     contratos del mismo inquilino.
+         *
+         *     Permiso `contract:read` (no `renter:read`, ya que el recurso ahora
+         *     cuelga de `/contracts/:id`): emitir el certificado es una operacion
+         *     de lectura/reporte sobre el contrato, mismo criterio que
+         *     `GET /contracts/:id`/`GET /contracts/:id/adjustments`.
+         *
+         *     `DebtCertificateService`/`DebtService`/`RenterRepository`/
+         *     `PropertyRepository` se importan DIFERIDO -- ver el docstring de
+         *     `contracts/debt_certificate_service.py` para el ciclo de import que
+         *     evita (mismo criterio que documentaba `people/router.py.
+         *     issue_debt_certificate`, issue #24, ahora eliminado).
+         */
+        post: operations["issue_contract_debt_certificate_v1_contracts__contract_id__debt_certificate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2210,6 +2277,80 @@ export interface components {
             adjustment_index_notes?: string | null;
             /** Notes */
             notes?: string | null;
+            /** Current Amount */
+            current_amount?: number | string | null;
+            /** Current Amount Since */
+            current_amount_since?: string | null;
+            /** Historical Amounts */
+            historical_amounts?: (number | string)[] | null;
+        };
+        /**
+         * ContractDetail
+         * @description Respuesta de `GET /v1/contracts/:id` (issue #106): `ContractSummary`
+         *     + `monthly_amounts[]` en orden DESCENDENTE (mes actual primero). Solo
+         *     este endpoint la expone -- `POST`/`PATCH`/`activate`/`terminate`
+         *     siguen usando `ContractSummary`/`ContractResponse` sin este campo.
+         */
+        ContractDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Property Id
+             * Format: uuid
+             */
+            property_id: string;
+            /**
+             * Renter Id
+             * Format: uuid
+             */
+            renter_id: string;
+            /** Currency */
+            currency: string;
+            /** Initial Amount */
+            initial_amount: string;
+            /** Current Amount */
+            current_amount: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Daily Late Fee Pct */
+            daily_late_fee_pct: string;
+            /** Adjustment Frequency Months */
+            adjustment_frequency_months: number | null;
+            /** Adjustment Index */
+            adjustment_index: string | null;
+            /** Adjustment Index Notes */
+            adjustment_index_notes: string | null;
+            /** Status */
+            status: string;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Monthly Amounts */
+            monthly_amounts: components["schemas"]["MonthlyAmount"][];
+        };
+        /** ContractDetailResponse */
+        ContractDetailResponse: {
+            data: components["schemas"]["ContractDetail"];
         };
         /** ContractListResponse */
         ContractListResponse: {
@@ -2700,6 +2841,64 @@ export interface components {
             is_super_admin: boolean;
         };
         /**
+         * MonthlyAmount
+         * @description Item de `monthly_amounts[]` -- issue #106, `sdd_03` v1.12 §8.
+         *
+         *     `period` es el dia 1 del mes calendario (mismo criterio que
+         *     `due_period` de `ContractAdjustment`); `amount` es el monto vigente
+         *     de ESE mes, derivado en el backend desde `initial_amount` + ajustes
+         *     `applied` (RN-09 de `spec_module_03`). `from_attributes=True` porque
+         *     el service devuelve `monthly_amounts.MonthlyAmountRow` (dataclass),
+         *     no un dict.
+         */
+        MonthlyAmount: {
+            /**
+             * Period
+             * Format: date
+             */
+            period: string;
+            /** Amount */
+            amount: string;
+        };
+        /**
+         * NeighborhoodCreate
+         * @description Body de POST /v1/neighborhoods.
+         */
+        NeighborhoodCreate: {
+            /** Name */
+            name: string;
+        };
+        /** NeighborhoodDetail */
+        NeighborhoodDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * NeighborhoodListResponse
+         * @description RF-05: "listado del catalogo completo, sin paginacion".
+         */
+        NeighborhoodListResponse: {
+            /** Data */
+            data: components["schemas"]["NeighborhoodDetail"][];
+        };
+        /** NeighborhoodResponse */
+        NeighborhoodResponse: {
+            data: components["schemas"]["NeighborhoodDetail"];
+        };
+        /**
+         * NeighborhoodUpdate
+         * @description Body de PATCH /v1/neighborhoods/:id -- rename.
+         */
+        NeighborhoodUpdate: {
+            /** Name */
+            name: string;
+        };
+        /**
          * Notification
          * @description Fila propia del usuario -- RF-02: "cada aviso lleva el payload
          *     suficiente para navegar al recurso ... sin queries extra".
@@ -3047,6 +3246,9 @@ export interface components {
         /**
          * PropertyCreate
          * @description Body de POST /v1/properties. `landlord_id` obligatorio (CA-01-01).
+         *     `neighborhood_id` obligatorio (issue #99, CA-01-08) -- decision del
+         *     PO: propiedades nuevas siempre llevan barrio, aunque la columna sea
+         *     nullable en DB por datos legacy.
          */
         PropertyCreate: {
             /** Address */
@@ -3057,10 +3259,16 @@ export interface components {
              */
             landlord_id: string;
             /**
+             * Neighborhood Id
+             * Format: uuid
+             */
+            neighborhood_id: string;
+            /**
              * Property Type
              * @default departamento
+             * @enum {string}
              */
-            property_type: string;
+            property_type: "departamento" | "casa" | "duplex" | "local" | "cochera" | "otro";
             /** Notes */
             notes?: string | null;
         };
@@ -3091,6 +3299,9 @@ export interface components {
              * Format: uuid
              */
             landlord_id: string;
+            /** Neighborhood Id */
+            neighborhood_id: string | null;
+            neighborhood?: components["schemas"]["NeighborhoodDetail"] | null;
             /** Property Type */
             property_type: string;
             /** Status */
@@ -3234,6 +3445,9 @@ export interface components {
              * Format: uuid
              */
             landlord_id: string;
+            /** Neighborhood Id */
+            neighborhood_id: string | null;
+            neighborhood?: components["schemas"]["NeighborhoodDetail"] | null;
             /** Property Type */
             property_type: string;
             /** Status */
@@ -3252,14 +3466,23 @@ export interface components {
          *     (derivado)" -- `status` solo acepta los 2 valores manuales
          *     (`ManualPropertyStatus`); enviar `"rented"` es rechazado por Pydantic
          *     con `422 VALIDATION_ERROR` antes de llegar al service.
+         *
+         *     `neighborhood_id` (issue #99): si el campo viene en el body, no puede
+         *     ser `None` -- "obligatorio en PATCH solo si el campo viene" (RF-01).
+         *     Por eso NO es `UUID | None`: si el cliente omite el campo, Pydantic no
+         *     lo incluye en `model_fields_set` y el service no lo toca; si lo envia
+         *     como `null`, Pydantic rechaza con `422 VALIDATION_ERROR` antes de
+         *     llegar al service (mismo criterio que `status="rented"` mas arriba).
          */
         PropertyUpdate: {
             /** Address */
             address?: string | null;
             /** Landlord Id */
             landlord_id?: string | null;
+            /** Neighborhood Id */
+            neighborhood_id?: string | null;
             /** Property Type */
-            property_type?: string | null;
+            property_type?: ("departamento" | "casa" | "duplex" | "local" | "cochera" | "otro") | null;
             /** Status */
             status?: ("available" | "unavailable") | null;
             /** Notes */
@@ -5524,43 +5747,13 @@ export interface operations {
             };
         };
     };
-    issue_debt_certificate_v1_renters__renter_id__debt_certificate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                renter_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_properties_v1_properties_get: {
         parameters: {
             query?: {
                 cursor?: string | null;
                 limit?: number;
                 landlord_id?: string | null;
+                neighborhood_id?: string | null;
                 status?: string | null;
                 property_type?: string | null;
                 search?: string | null;
@@ -5849,6 +6042,123 @@ export interface operations {
             };
         };
     };
+    list_neighborhoods_v1_neighborhoods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborhoodListResponse"];
+                };
+            };
+        };
+    };
+    create_neighborhood_v1_neighborhoods_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborhoodCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborhoodResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_neighborhood_v1_neighborhoods__neighborhood_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                neighborhood_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_neighborhood_v1_neighborhoods__neighborhood_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                neighborhood_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborhoodUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborhoodResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_contracts_v1_contracts_get: {
         parameters: {
             query?: {
@@ -5936,7 +6246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContractResponse"];
+                    "application/json": components["schemas"]["ContractDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6069,6 +6379,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdjustmentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_contract_debt_certificate_v1_contracts__contract_id__debt_certificate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

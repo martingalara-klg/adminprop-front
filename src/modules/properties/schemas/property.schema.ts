@@ -10,14 +10,12 @@
 //   service_type: uno de los 7 valores del enum.
 //   account_number: 1-100 caracteres, obligatorio en cada cuenta.
 import { z } from 'zod'
+import { PROPERTY_TYPE_OPTIONS } from '@/shared/utils/propertyType'
 
-export const PROPERTY_TYPE_OPTIONS = [
-  'departamento',
-  'casa',
-  'local',
-  'cochera',
-  'otro',
-] as const
+// Issue #55: catálogo + labels es-AR (incluye `duplex`) viven en
+// src/shared/utils/propertyType.ts — reexportado acá para no romper los
+// imports existentes desde este schema.
+export { PROPERTY_TYPE_OPTIONS }
 
 // RF-04: `rented` es derivado — nunca se ofrece como opción manual.
 export const MANUAL_PROPERTY_STATUS_OPTIONS = ['available', 'unavailable'] as const
@@ -49,24 +47,36 @@ const addressField = z
 
 const landlordIdField = z.string().min(1, 'Seleccioná un propietario.')
 
-const propertyTypeField = z.string().max(50, 'El tipo no puede superar los 50 caracteres.')
+// issue #99 (back) / #49 (front): barrio obligatorio en alta/edición —
+// decisión del PO, propiedades nuevas siempre llevan barrio (aunque la
+// columna sea nullable en DB por datos legacy).
+const neighborhoodIdField = z.string().min(1, 'Seleccioná un barrio.')
+
+// El backend (decisión #103, ya reflejada en el OpenAPI regenerado)
+// restringió `property_type` a un enum cerrado — coincide exactamente
+// con `PROPERTY_TYPE_OPTIONS` (antes se documentaba como texto libre
+// corto en sdd_02, comportamiento ya superado).
+const propertyTypeField = z.enum(PROPERTY_TYPE_OPTIONS)
 
 const notesField = z.string().optional().or(z.literal(''))
 
 // RF-01 + CA-01-01: alta con dirección (obligatoria), propietario
-// (obligatorio) y tipo.
+// (obligatorio) y tipo. CA-01-08 (issue #99/#49): barrio obligatorio.
 export const createPropertySchema = z.object({
   address: addressField,
   landlord_id: landlordIdField,
+  neighborhood_id: neighborhoodIdField,
   property_type: propertyTypeField,
   notes: notesField,
 })
 export type CreatePropertyInput = z.infer<typeof createPropertySchema>
 
 // RF-01: edición de todos los campos salvo `status="rented"` (derivado).
+// CA-01-08: barrio obligatorio también en edición.
 export const updatePropertySchema = z.object({
   address: addressField,
   landlord_id: landlordIdField,
+  neighborhood_id: neighborhoodIdField,
   property_type: propertyTypeField,
   status: z.enum(MANUAL_PROPERTY_STATUS_OPTIONS),
   notes: notesField,
@@ -109,6 +119,15 @@ export type UpdateServiceAccountInput = z.infer<typeof updateServiceAccountSchem
 // propiedad — solo los 3 tipos declarados en el catálogo del backend
 // (`charges/schemas.py.ChargeType`).
 export const RECURRING_CHARGE_TYPE_OPTIONS = ['rentas', 'municipalidad', 'otro'] as const
+
+// `Record<string, string>` (no `(typeof RECURRING_CHARGE_TYPE_OPTIONS)[number]`)
+// a propósito: `PropertyRecurringCharges` indexa con `charge.charge_type`,
+// que viene de la API como `string` (no del enum acotado del form).
+export const CHARGE_TYPE_LABELS: Record<string, string> = {
+  rentas: 'Rentas',
+  municipalidad: 'Municipalidad',
+  otro: 'Otro',
+}
 
 export const createRecurringChargeSchema = z.object({
   charge_type: z.enum(RECURRING_CHARGE_TYPE_OPTIONS),

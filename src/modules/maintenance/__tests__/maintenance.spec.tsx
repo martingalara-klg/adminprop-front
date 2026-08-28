@@ -8,7 +8,11 @@ import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
 import { AdminPropApiError } from '@/api/errors'
-import type { WorkOrderSummary, WorkOrderDetail, WorkOrderQuoteSummary } from '@/api/maintenance.api'
+import type {
+  WorkOrderSummary,
+  WorkOrderDetail,
+  WorkOrderQuoteSummary,
+} from '@/api/maintenance.api'
 import { renderMaintenanceApp } from './test-router'
 
 vi.mock('@/api/maintenance.api', () => ({
@@ -23,7 +27,9 @@ vi.mock('@/api/maintenance.api', () => ({
     uploadQuoteAttachment: vi.fn(),
     approveQuote: vi.fn(),
   },
-  attachmentDownloadUrl: vi.fn((id: string) => `http://localhost:8000/v1/attachments/${id}/download`),
+  attachmentDownloadUrl: vi.fn(
+    (id: string) => `http://localhost:8000/v1/attachments/${id}/download`,
+  ),
 }))
 
 vi.mock('@/api/properties.api', () => ({
@@ -82,6 +88,7 @@ const PROPERTY_OPTIONS = {
       id: 'p-1',
       address: 'Av. Colón 1234',
       landlord_id: 'l-1',
+      neighborhood_id: null,
       property_type: 'departamento',
       status: 'available',
       created_at: '2026-08-01T00:00:00Z',
@@ -153,33 +160,42 @@ describe('UC-13 — Alta de pedido y listado del encargado (CA-06-01)', () => {
     expect(screen.queryByRole('link', { name: /nuevo pedido/i })).not.toBeInTheDocument()
   })
 
-  it('CA-06-01: owner crea un pedido con pagador y fotos, y navega al detalle', async () => {
+  it('CA-06-01: owner crea un pedido con pagador y fotos desde el modal, y lo ve en el listado', async () => {
     setSession(OWNER_SESSION)
     vi.mocked(propertiesApi.list).mockResolvedValue(PROPERTY_OPTIONS)
+    // Issue #48: el alta vive en un modal sobre el listado — la mutation
+    // invalida `['work-orders', 'list']`, así que el refetch trae el
+    // pedido recién creado.
+    vi.mocked(maintenanceApi.list)
+      .mockResolvedValueOnce({ data: [], meta: {} })
+      .mockResolvedValueOnce({ data: [makeWorkOrderSummary({ payer: 'agency' })], meta: {} })
     vi.mocked(maintenanceApi.create).mockResolvedValueOnce({
       data: makeWorkOrderSummary({ payer: 'agency' }),
     })
     vi.mocked(maintenanceApi.uploadWorkOrderAttachment).mockResolvedValueOnce({
       data: makeWorkOrderSummary({ payer: 'agency' }),
     })
-    vi.mocked(maintenanceApi.get).mockResolvedValue({ data: makeDetail({ payer: 'agency' }) })
 
     const user = userEvent.setup()
-    renderMaintenanceApp('/maintenance/new')
+    renderMaintenanceApp('/maintenance')
+
+    await user.click(await screen.findByRole('button', { name: 'Nuevo pedido' }))
+
+    const dialog = await screen.findByRole('dialog')
 
     await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Av. Colón 1234' })).toBeInTheDocument()
+      expect(within(dialog).getByRole('option', { name: 'Av. Colón 1234' })).toBeInTheDocument()
     })
 
-    await user.selectOptions(screen.getByLabelText(/propiedad/i), 'p-1')
-    await user.type(screen.getByLabelText(/título/i), 'Arreglo de cañería')
-    await user.click(screen.getByLabelText(/paga administración y descuenta/i))
+    await user.selectOptions(within(dialog).getByLabelText(/propiedad/i), 'p-1')
+    await user.type(within(dialog).getByLabelText(/título/i), 'Arreglo de cañería')
+    await user.click(within(dialog).getByLabelText(/paga administración y descuenta/i))
 
     const file = new File(['foto'], 'foto.jpg', { type: 'image/jpeg' })
-    await user.upload(screen.getByTestId('photo-picker-input'), file)
-    expect(screen.getByText('foto.jpg')).toBeInTheDocument()
+    await user.upload(within(dialog).getByTestId('photo-picker-input'), file)
+    expect(within(dialog).getByText('foto.jpg')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /crear pedido/i }))
+    await user.click(within(dialog).getByRole('button', { name: /crear pedido/i }))
 
     await waitFor(() => {
       expect(maintenanceApi.create).toHaveBeenCalledWith({
@@ -192,10 +208,11 @@ describe('UC-13 — Alta de pedido y listado del encargado (CA-06-01)', () => {
     await waitFor(() => {
       expect(maintenanceApi.uploadWorkOrderAttachment).toHaveBeenCalledWith('wo-1', file)
     })
-    // Navega al detalle del pedido recién creado.
+    // Modal cerrado + listado refrescado con el pedido recién creado.
     await waitFor(() => {
-      expect(screen.getByText('Av. Colón 1234')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+    expect(screen.getByRole('link', { name: 'Av. Colón 1234' })).toBeInTheDocument()
   })
 })
 
@@ -209,6 +226,9 @@ describe('UC-13 — Cotizaciones del encargado (CA-06-02)', () => {
     const user = userEvent.setup()
     renderMaintenanceApp('/maintenance/wo-1')
 
+    // Issue #48: el form de cotización vive en un modal — se abre desde
+    // el botón "Nueva cotización".
+    await user.click(await screen.findByRole('button', { name: 'Nueva cotización' }))
     await waitFor(() => {
       expect(screen.getByLabelText(/monto/i)).toBeInTheDocument()
     })
@@ -422,7 +442,11 @@ describe('UC-13 — Cancelación (CA-06-07)', () => {
     setSession(OWNER_SESSION)
     vi.mocked(maintenanceApi.get).mockResolvedValue({ data: makeDetail() })
     vi.mocked(maintenanceApi.cancel).mockRejectedValueOnce(
-      new AdminPropApiError('WORK_ORDER_ALREADY_SETTLED', 422, 'La orden de trabajo ya fue liquidada.'),
+      new AdminPropApiError(
+        'WORK_ORDER_ALREADY_SETTLED',
+        422,
+        'La orden de trabajo ya fue liquidada.',
+      ),
     )
 
     const user = userEvent.setup()

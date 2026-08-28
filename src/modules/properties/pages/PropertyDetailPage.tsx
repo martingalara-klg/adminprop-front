@@ -7,7 +7,20 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, ForbiddenState, ConfirmDeleteButton } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  ForbiddenState,
+  ConfirmDeleteButton,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  ContractStatusBadge,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { PropertyUpdate, PropertyServiceAccountCreate } from '@/api/properties.api'
 import type { CreateRecurringChargeInput } from '../schemas/property.schema'
@@ -18,11 +31,13 @@ import { ServiceAccountsList } from '../components/ServiceAccountsList'
 import { PropertyContractSummary } from '../components/PropertyContractSummary'
 import { PropertyWorkOrdersHistory } from '../components/PropertyWorkOrdersHistory'
 import { PropertyRecurringCharges } from '../components/PropertyRecurringCharges'
+import { RecurringChargeForm } from '../components/RecurringChargeForm'
 
 import { usePropertyDetail } from '../hooks/usePropertyDetail'
 import { useUpdateProperty } from '../hooks/useUpdateProperty'
 import { useDeleteProperty } from '../hooks/useDeleteProperty'
 import { useLandlordOptions } from '../hooks/useLandlordOptions'
+import { useNeighborhoodsList } from '../hooks/useNeighborhoodsList'
 import { useServiceAccounts } from '../hooks/useServiceAccounts'
 import { useCreateServiceAccount } from '../hooks/useCreateServiceAccount'
 import { useUpdateServiceAccount } from '../hooks/useUpdateServiceAccount'
@@ -41,6 +56,7 @@ export function PropertyDetailPage() {
 
   const propertyQuery = usePropertyDetail(propertyId, canReadProperties)
   const landlordsQuery = useLandlordOptions(canReadProperties)
+  const neighborhoodsQuery = useNeighborhoodsList(canReadProperties)
   const serviceAccountsQuery = useServiceAccounts(propertyId, canReadProperties)
   const workOrdersQuery = usePropertyWorkOrders(propertyId, canReadProperties)
   const recurringChargesQuery = usePropertyRecurringCharges(propertyId, canReadProperties)
@@ -61,6 +77,8 @@ export function PropertyDetailPage() {
   const [serviceAccountError, setServiceAccountError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [chargeError, setChargeError] = useState<string | null>(null)
+  const [isChargeDialogOpen, setIsChargeDialogOpen] = useState(false)
+  const [chargeSuccess, setChargeSuccess] = useState<string | null>(null)
 
   if (!canReadProperties) {
     return (
@@ -76,6 +94,7 @@ export function PropertyDetailPage() {
 
   const property = propertyQuery.data.data
   const landlords = landlordsQuery.data?.data ?? []
+  const neighborhoods = neighborhoodsQuery.data?.data ?? []
   const serviceAccounts = serviceAccountsQuery.data?.data ?? []
   const workOrders = workOrdersQuery.data?.data ?? []
   const recurringCharges = recurringChargesQuery.data?.data ?? []
@@ -132,14 +151,26 @@ export function PropertyDetailPage() {
   function handleCreateCharge(values: CreateRecurringChargeInput) {
     setChargeError(null)
     createRecurringCharge.mutate(values, {
+      onSuccess: () => {
+        setIsChargeDialogOpen(false)
+        setChargeSuccess('Concepto recurrente agregado correctamente.')
+      },
       onError: (error) => setChargeError(resolveErrorMessage(error)),
     })
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <header>
-        <h1 className="text-lg font-semibold">{property.address}</h1>
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold">{property.address}</h1>
+          <ContractStatusBadge status={property.status} />
+        </div>
+        {/* issue #99/#49: propiedades legacy preexistentes al catálogo de
+            barrios no tienen `neighborhood` embebido — "Sin barrio". */}
+        <p className="text-sm text-muted-foreground">
+          {property.neighborhood?.name ?? 'Sin barrio'}
+        </p>
       </header>
 
       {canManageProperties ? (
@@ -147,6 +178,7 @@ export function PropertyDetailPage() {
           <PropertyEditForm
             property={property}
             landlords={landlords}
+            neighborhoods={neighborhoods}
             errorMessage={editError}
             isSubmitting={updateProperty.isPending}
             onSubmit={handleEditSubmit}
@@ -194,13 +226,43 @@ export function PropertyDetailPage() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Conceptos de cargos recurrentes</h2>
-        <PropertyRecurringCharges
-          charges={recurringCharges}
-          errorMessage={chargeError}
-          isSubmitting={createRecurringCharge.isPending}
-          onSubmit={handleCreateCharge}
-        />
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Conceptos de cargos recurrentes
+          </h2>
+          {canManageProperties ? (
+            <Dialog
+              open={isChargeDialogOpen}
+              onOpenChange={(open) => {
+                setIsChargeDialogOpen(open)
+                if (open) setChargeError(null)
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button type="button" size="sm">
+                  Nuevo concepto
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nuevo concepto recurrente</DialogTitle>
+                </DialogHeader>
+                <RecurringChargeForm
+                  errorMessage={chargeError}
+                  isSubmitting={createRecurringCharge.isPending}
+                  onSubmit={handleCreateCharge}
+                />
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Estos conceptos (renta, expensas, municipal, etc.) se verifican todos los meses en el
+          checklist de la liquidación y su importe se descuenta al propietario en la rendición —
+          la carga del importe mensual se hace desde el módulo de liquidaciones, no acá.
+        </p>
+        {chargeSuccess ? <SuccessBanner message={chargeSuccess} /> : null}
+        <PropertyRecurringCharges charges={recurringCharges} />
       </section>
 
       {canManageProperties ? (

@@ -124,6 +124,39 @@ describe('UC-LOGIN — Login (sdd_03 §1)', () => {
     })
   })
 
+  it('CA-45-01: login de Super Admin sin organizaciones setea sesión superadmin y navega a /superadmin', async () => {
+    // sdd_03 §1 v1.6: "is_super_admin = el flag del usuario (true solo en
+    // el login de Super Admin, que no lleva organizations[])" -- reproduce
+    // el bug del issue #45 (Railway, primer login real de superadmin):
+    // `organizations: []` + `is_super_admin: true` con `status:
+    // "authenticated"`.
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      data: {
+        status: 'authenticated',
+        user: { id: 'sa-1', email: 'sa@adminprop.com', full_name: 'Super Admin' },
+        organizations: [],
+        permissions: [],
+        is_super_admin: true,
+      },
+    })
+
+    renderAuthApp('/login')
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText(/email/i), 'sa@adminprop.com')
+    await user.type(screen.getByLabelText(/contraseña/i), 'Password1234')
+    await user.click(screen.getByRole('button', { name: /ingresar/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Organizaciones')).toBeInTheDocument()
+    })
+
+    const session = useSessionStore.getState().session
+    expect(session?.isSuperAdmin).toBe(true)
+    expect(session?.organization).toBeNull()
+    expect(session?.email).toBe('sa@adminprop.com')
+  })
+
   it('CA-05-04: login exitoso con una sola organización redirige a "/" autenticado', async () => {
     vi.mocked(authApi.login).mockResolvedValueOnce({
       data: {

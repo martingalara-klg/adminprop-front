@@ -1,0 +1,45 @@
+# Caddyfile — sirve el build estático de Vite (SPA) + proxy /v1 hacia la API.
+#
+# Referencias:
+# - Issue #43 (Dockerfile de este repo) — mismo origen front/API en Railway;
+#   las cookies HttpOnly `SameSite=Lax` del backend (sdd_04 §2, decisión #43
+#   del SDD) no viajan entre subdominios distintos de Railway.
+# - {$API_UPSTREAM}: SIN default hardcodeado a producción. En local, el
+#   contenedor se corre con `-e API_UPSTREAM=http://<servicio-api>:8000`
+#   (ver RUNBOOK-LOCAL-002 §11). Si no se define, cae en
+#   http://localhost:8000 -- sirve solo como default sensato de desarrollo,
+#   nunca resuelve nada dentro del propio contenedor de Caddy.
+# - {$PORT:80}: Railway inyecta PORT en runtime; 80 es el default para uso
+#   local sin la variable seteada.
+
+{
+	admin off
+}
+
+:{$PORT:80} {
+	root * /srv
+	encode gzip
+
+	# `route` fuerza orden de ejecución por posición en el archivo -- el
+	# orden default de Caddy (ver "Directive order" en la doc) corre
+	# try_files/file_server ANTES que reverse_proxy, así que sin este
+	# bloque try_files reescribe /v1/* a /index.html antes de que
+	# reverse_proxy llegue a verlo (reproducido localmente: file_server
+	# devolvía 405 Method Not Allowed en POST /v1/auth/login porque servía
+	# index.html en vez de proxyear). Con `route`, reverse_proxy corre
+	# primero y es terminal para lo que matchea /v1/*.
+	route {
+		# Reverse proxy /v1/* al upstream de la API. Los headers Host/
+		# X-Forwarded-* quedan en los defaults de Caddy (X-Forwarded-For,
+		# X-Forwarded-Proto, X-Forwarded-Host) -- no hace falta
+		# configuración adicional. Estos defaults tampoco bufferean el
+		# body de la request/response, así que las descargas (PDF/Excel
+		# de liquidaciones) pasan streameadas sin retenerse en memoria.
+		reverse_proxy /v1/* {$API_UPSTREAM:http://localhost:8000}
+
+		# Fallback SPA: cualquier ruta que no matcheó un archivo estático
+		# ni /v1/* cae en index.html (React Router client-side routing).
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -4,9 +4,9 @@
 // respondió `400 SETTLEMENT_EXCHANGE_RATE_REQUIRED` al confirmar
 // (RN-L06 — el propietario tiene montos USD en el período). El error se
 // muestra explícito para que quede claro por qué el wizard "retrocedió".
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Input, Label } from '@/shared/components'
+import { Button, Label, MoneyInput } from '@/shared/components'
 import { exchangeRateSchema, type ExchangeRateInput } from '../../schemas/settlement.schema'
 
 type Props = {
@@ -18,7 +18,7 @@ type Props = {
 
 export function ExchangeRateStep({ errorMessage, isSubmitting, onBack, onSubmit }: Props) {
   const {
-    register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<ExchangeRateInput>({
@@ -43,10 +43,19 @@ export function ExchangeRateStep({ errorMessage, isSubmitting, onBack, onSubmit 
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="wizard-exchange-rate">Tipo de cambio (ARS/USD)</Label>
-        <Input
-          id="wizard-exchange-rate"
-          aria-invalid={!!errors.exchange_rate}
-          {...register('exchange_rate')}
+        <Controller
+          control={control}
+          name="exchange_rate"
+          render={({ field }) => (
+            <MoneyInput
+              id="wizard-exchange-rate"
+              decimalPrecision={4}
+              aria-invalid={!!errors.exchange_rate}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+            />
+          )}
         />
         {errors.exchange_rate ? (
           <p className="text-sm text-destructive" role="alert">

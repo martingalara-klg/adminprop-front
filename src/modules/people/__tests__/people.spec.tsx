@@ -131,6 +131,9 @@ describe('Módulo 2 — Personas (#9)', () => {
     renderPeopleApp('/people')
     const user = userEvent.setup()
 
+    // Issue #48: el form de alta vive en un modal — se abre desde el
+    // botón "Nuevo propietario" del listado.
+    await user.click(await screen.findByRole('button', { name: 'Nuevo propietario' }))
     await waitFor(() => screen.getByLabelText('Nombre'))
     await user.type(screen.getByLabelText('Nombre'), 'Juan Pérez')
     await user.type(screen.getByLabelText('% de comisión'), '10')
@@ -155,9 +158,7 @@ describe('Módulo 2 — Personas (#9)', () => {
     await waitFor(() => screen.getByTestId('landlord-commission-readonly'))
     expect(screen.getByTestId('landlord-commission-readonly')).toHaveTextContent('10%')
     expect(screen.queryByLabelText('% de comisión')).not.toBeInTheDocument()
-    expect(
-      screen.getByText('Solo el owner puede cambiar el % de comisión.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Solo el owner puede cambiar el % de comisión.')).toBeInTheDocument()
     // Datos de contacto SÍ son editables por el admin.
     expect(screen.getByLabelText('Nombre')).toBeEnabled()
     unmount()
@@ -279,9 +280,9 @@ describe('Módulo 2 — Personas (#9)', () => {
 
     await waitFor(() => screen.getByText('María López'))
     expect(screen.getByText('2')).toBeInTheDocument()
-    expect(screen.getByText('150.000,00')).toBeInTheDocument()
+    expect(screen.getByText('150.000')).toBeInTheDocument()
     expect(screen.getByText('45')).toBeInTheDocument()
-    expect(screen.getByText('4.500,00')).toBeInTheDocument()
+    expect(screen.getByText('4.500')).toBeInTheDocument()
   })
 
   it('CA-02-05 (estado empty): sin deuda, la ficha muestra "Sin deuda"', async () => {
@@ -358,5 +359,41 @@ describe('Módulo 2 — Personas (#9)', () => {
       expect(screen.getByText('Acceso restringido')).toBeInTheDocument()
     })
     expect(peopleApi.listRenters).not.toHaveBeenCalled()
+  })
+
+  // ── Issue #55 (ronda feedback #2 del PO) — cierra el #29 ────────────────
+
+  it('CA-55-02: la ficha del propietario muestra "Con contrato" (verde) para una propiedad rented y "Sin contrato" (rojo) para el resto', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({
+      data: {
+        ...LANDLORD_DETAIL,
+        properties: [
+          {
+            id: 'p-1',
+            address: 'Av. Colón 1234',
+            property_type: 'departamento',
+            status: 'rented',
+            active_contract: null,
+          },
+          {
+            id: 'p-2',
+            address: 'San Martín 555',
+            property_type: 'duplex',
+            status: 'available',
+            active_contract: null,
+          },
+        ],
+      },
+    })
+
+    renderPeopleApp('/people/landlords/l-1')
+
+    await waitFor(() => screen.getByText('Av. Colón 1234'))
+    expect(screen.getByText('Con contrato')).toBeInTheDocument()
+    expect(screen.getByText('Sin contrato')).toBeInTheDocument()
+    // CA-55-01: labels de tipo capitalizados (incluye `duplex`).
+    expect(screen.getByText('Departamento')).toBeInTheDocument()
+    expect(screen.getByText('Duplex')).toBeInTheDocument()
   })
 })

@@ -109,6 +109,9 @@ describe('Módulo 7 — Administración (#8)', () => {
     renderAdminApp('/admin')
     const user = userEvent.setup()
 
+    // Issue #48: el form de invitación vive en un modal — se abre desde
+    // el botón "Invitar usuario" de la sección de invitaciones.
+    await user.click(await screen.findByRole('button', { name: 'Invitar usuario' }))
     await waitFor(() => screen.getByLabelText('Email'))
     await user.type(screen.getByLabelText('Email'), 'maintenance@inmobiliaria-sur.com')
     await user.selectOptions(screen.getByLabelText('Rol'), 'maintenance')
@@ -140,12 +143,17 @@ describe('Módulo 7 — Administración (#8)', () => {
     renderAdminApp('/admin')
     const user = userEvent.setup()
 
+    // Issue #48: el form de invitación vive en un modal — se abre desde
+    // el botón "Invitar usuario" de la sección de invitaciones.
+    await user.click(await screen.findByRole('button', { name: 'Invitar usuario' }))
     await waitFor(() => screen.getByLabelText('Email'))
     await user.type(screen.getByLabelText('Email'), 'maintenance@inmobiliaria-sur.com')
     await user.click(screen.getByRole('button', { name: 'Invitar' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Ya hay una invitación pendiente para ese email.')).toBeInTheDocument()
+      expect(
+        screen.getByText('Ya hay una invitación pendiente para ese email.'),
+      ).toBeInTheDocument()
     })
   })
 
@@ -209,8 +217,18 @@ describe('Módulo 7 — Administración (#8)', () => {
     setSession(OWNER_SESSION)
     vi.mocked(adminApi.listRoles).mockResolvedValueOnce({
       data: [
-        { id: 'r-1', name: 'owner', permissions: ['user:manage', 'organization:configure'], is_system_role: true },
-        { id: 'r-2', name: 'admin', permissions: ['contract:read', 'role:read'], is_system_role: true },
+        {
+          id: 'r-1',
+          name: 'owner',
+          permissions: ['user:manage', 'organization:configure'],
+          is_system_role: true,
+        },
+        {
+          id: 'r-2',
+          name: 'admin',
+          permissions: ['contract:read', 'role:read'],
+          is_system_role: true,
+        },
         { id: 'r-3', name: 'maintenance', permissions: ['work-order:read'], is_system_role: true },
       ],
     })
@@ -302,8 +320,6 @@ describe('Módulo 7 — Administración (#8)', () => {
         expect.objectContaining({ grace_day: 15, contract_expiry_notice_days: 60 }),
       )
     })
-    expect(
-      await screen.findByText(/El nuevo día de gracia rige desde ahora/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/El nuevo día de gracia rige desde ahora/)).toBeInTheDocument()
   })
 })

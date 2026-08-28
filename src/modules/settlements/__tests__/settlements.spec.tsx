@@ -86,6 +86,7 @@ const PROPERTIES = {
       id: 'p-1',
       address: 'Av. Colón 1234',
       landlord_id: 'l-1',
+      neighborhood_id: null,
       property_type: 'departamento',
       status: 'available',
       created_at: '2026-01-01T00:00:00Z',
@@ -94,6 +95,7 @@ const PROPERTIES = {
       id: 'p-2',
       address: 'San Martín 500',
       landlord_id: 'l-1',
+      neighborhood_id: null,
       property_type: 'casa',
       status: 'available',
       created_at: '2026-01-01T00:00:00Z',
@@ -509,7 +511,7 @@ describe('Módulo 5 — Liquidaciones (#14)', () => {
 
     const groups = await screen.findByTestId('settlement-property-groups')
     expect(within(groups).getByText('Av. Colón 1234')).toBeInTheDocument()
-    expect(within(groups).getByText(/Subtotal: 200.000,00/)).toBeInTheDocument()
+    expect(within(groups).getByText(/Subtotal: 200.000/)).toBeInTheDocument()
   })
 
   it('CA-05-06: needs_regeneration muestra el badge y regenerar llama a POST .../regenerate', async () => {

@@ -13,6 +13,7 @@ import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/api/auth.api'
 import { AdminPropApiError, mapError } from '@/api/errors'
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
+import { resolveErrorCodeMessage } from '@/shared/i18n/messages/error-codes.es-AR'
 import type { components } from '@/api/generated/types'
 
 type OrganizationSummary =
@@ -49,15 +50,25 @@ export function useLoginFlow() {
         return
       }
 
-      const activeOrganization = organizations[0]
+      // sdd_03 §1 v1.6: "is_super_admin = el flag del usuario (true solo en
+      // el login de Super Admin, que no lleva organizations[])" -- para un
+      // Super Admin `organizations` viene `[]` a propósito, no es un shape
+      // inválido. `activeOrganization` queda `null` en ese caso (mismo
+      // patrón que `Session.organization` en session-store.ts).
+      const activeOrganization = organizations[0] ?? null
 
-      if (!user || !activeOrganization || !permissions || is_super_admin == null) {
-        // sdd_03 no documenta este caso -- lo tratamos como error generico
-        // en vez de asumir un shape no especificado.
+      // Shape no documentado por sdd_03: faltan campos requeridos, o un
+      // usuario NO superadmin llega sin ninguna organización asociada
+      // (eso sí sería inesperado -- todo login no-superadmin exitoso trae
+      // al menos la organización del JWT emitido).
+      const isUnexpectedShape =
+        !user || !permissions || is_super_admin == null || (!is_super_admin && !activeOrganization)
+
+      if (isUnexpectedShape) {
         setState({
           kind: 'error',
           code: 'INTERNAL_ERROR',
-          message: 'Ocurrió un error inesperado. El equipo fue notificado.',
+          message: resolveErrorCodeMessage('INTERNAL_ERROR'),
         })
         return
       }

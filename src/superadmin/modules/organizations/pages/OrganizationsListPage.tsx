@@ -3,7 +3,18 @@
 // RF-01 dashboard + RF-02 alta. Issue #7: CA-00-01 lado UI ("crear una
 // organización desde el dashboard y verla listada con su estado").
 import { useState } from 'react'
-import { Spinner, EmptyState, ErrorState, Button } from '@/shared/components'
+import {
+  Spinner,
+  EmptyState,
+  ErrorState,
+  Button,
+  SuccessBanner,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import { useOrganizationsList } from '../hooks/useOrganizationsList'
 import { useCreateOrganization } from '../hooks/useCreateOrganization'
@@ -18,6 +29,7 @@ import type { CreateOrganizationInput } from '../schemas/organization.schema'
 export function OrganizationsListPage() {
   const [filters, setFilters] = useState<OrganizationsFilterValue>({ status: '', search: '' })
   const [isCreating, setIsCreating] = useState(false)
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
   const { data, isLoading, isError, error, refetch } = useOrganizationsList({
     status: filters.status || undefined,
@@ -27,7 +39,10 @@ export function OrganizationsListPage() {
 
   function handleCreate(values: CreateOrganizationInput) {
     createMutation.mutate(values, {
-      onSuccess: () => setIsCreating(false),
+      onSuccess: () => {
+        setIsCreating(false)
+        setCreateSuccess('Organización creada correctamente.')
+      },
     })
   }
 
@@ -35,25 +50,34 @@ export function OrganizationsListPage() {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Organizaciones</h1>
-        {!isCreating ? (
-          <Button type="button" onClick={() => setIsCreating(true)}>
-            Nueva organización
-          </Button>
-        ) : null}
+        <Dialog
+          open={isCreating}
+          onOpenChange={(open) => {
+            setIsCreating(open)
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button type="button">Nueva organización</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Nueva organización</DialogTitle>
+            </DialogHeader>
+            <CreateOrganizationForm
+              onSubmit={handleCreate}
+              isSubmitting={createMutation.isPending}
+              onCancel={() => setIsCreating(false)}
+            />
+            {createMutation.isError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {resolveErrorMessage(createMutation.error)}
+              </p>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {isCreating ? (
-        <CreateOrganizationForm
-          onSubmit={handleCreate}
-          isSubmitting={createMutation.isPending}
-          onCancel={() => setIsCreating(false)}
-        />
-      ) : null}
-      {createMutation.isError ? (
-        <p className="text-sm text-destructive" role="alert">
-          {resolveErrorMessage(createMutation.error)}
-        </p>
-      ) : null}
+      {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
 
       <OrganizationsFilters value={filters} onChange={setFilters} />
 

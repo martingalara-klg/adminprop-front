@@ -30,7 +30,10 @@ export const errorCodeMessages: Record<string, string> = {
   BUSINESS_RULE_VIOLATION: 'La operación viola una regla de negocio.',
   INVALID_STATUS_TRANSITION: 'No se puede cambiar el estado desde el estado actual.',
   RATE_LIMIT_EXCEEDED: 'Demasiadas solicitudes. Esperá unos segundos e intentá nuevamente.',
-  INTERNAL_ERROR: 'Ocurrió un error inesperado. El equipo fue notificado.',
+  // issue #45: "El equipo fue notificado" prometía una notificación que
+  // hoy no existe (Sentry es post-infra, CLAUDE.md §7 "Pendientes") --
+  // copy honesto que no promete algo que el sistema todavía no hace.
+  INTERNAL_ERROR: 'Ocurrió un error inesperado. Reintentá en unos minutos.',
   NETWORK_ERROR: 'Error de red. Verificá tu conexión.',
 
   // ── Auth y usuarios ─────────────────────────────────────────────────────
@@ -54,13 +57,17 @@ export const errorCodeMessages: Record<string, string> = {
   // ── Cobranzas ────────────────────────────────────────────────────────────
   RENT_PERIOD_ALREADY_PAID: 'El período ya fue pagado.',
   PAYMENT_EXCEEDS_CONTRACT_BALANCE: 'El monto del cobro excede el saldo pendiente del contrato.',
-  EXCHANGE_RATE_REQUIRED: 'Se requiere el tipo de cambio porque la moneda del pago difiere de la del contrato.',
+  EXCHANGE_RATE_REQUIRED:
+    'Se requiere el tipo de cambio porque la moneda del pago difiere de la del contrato.',
   PAYMENT_ALREADY_VOIDED: 'El cobro ya fue anulado.',
-  RENTER_HAS_DEBT: 'El inquilino tiene deuda pendiente.',
+  // Issue #104/#56, decisión #123: renombrado desde RENTER_HAS_DEBT — el
+  // libre deuda pasó a ser por CONTRATO (`POST /contracts/:id/debt-certificate`).
+  CONTRACT_HAS_DEBT: 'El contrato tiene deuda pendiente.',
 
   // ── Liquidaciones ────────────────────────────────────────────────────────
   SETTLEMENT_ALREADY_EXISTS: 'Ya existe una liquidación para este propietario y período.',
-  SETTLEMENT_EXCHANGE_RATE_REQUIRED: 'Se requiere el tipo de cambio para generar la liquidación en USD.',
+  SETTLEMENT_EXCHANGE_RATE_REQUIRED:
+    'Se requiere el tipo de cambio para generar la liquidación en USD.',
   CHARGE_ENTRY_ALREADY_EXISTS: 'Ya existe un cargo cargado para este período.',
 
   // ── Mantenimiento ────────────────────────────────────────────────────────

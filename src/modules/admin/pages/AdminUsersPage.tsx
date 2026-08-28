@@ -7,7 +7,18 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  EmptyState,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { UserSummary, InvitationSummary } from '@/api/admin.api'
 
@@ -42,6 +53,8 @@ export function AdminUsersPage() {
 
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isInviteOpen, setIsInviteOpen] = useState(false)
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null)
 
   if (!canManageUsers) {
     return (
@@ -67,6 +80,10 @@ export function AdminUsersPage() {
   function handleInvite(values: InviteUserInput) {
     setInviteError(null)
     inviteUser.mutate(values, {
+      onSuccess: () => {
+        setIsInviteOpen(false)
+        setInviteSuccess('Invitación enviada correctamente.')
+      },
       onError: (error) => setInviteError(resolveErrorMessage(error)),
     })
   }
@@ -102,9 +119,7 @@ export function AdminUsersPage() {
       <section>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Usuarios</h2>
         {usersQuery.isLoading ? <Spinner label="Cargando usuarios..." /> : null}
-        {usersQuery.isError ? (
-          <ErrorState message={resolveErrorMessage(usersQuery.error)} />
-        ) : null}
+        {usersQuery.isError ? <ErrorState message={resolveErrorMessage(usersQuery.error)} /> : null}
         {usersQuery.data && usersQuery.data.data.length === 0 ? (
           <EmptyState title="No hay usuarios en la organización" />
         ) : null}
@@ -124,12 +139,34 @@ export function AdminUsersPage() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-sm font-medium text-muted-foreground">Invitaciones</h2>
-        <InviteUserForm
-          errorMessage={inviteError}
-          isSubmitting={inviteUser.isPending}
-          onSubmit={handleInvite}
-        />
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground">Invitaciones</h2>
+          <Dialog
+            open={isInviteOpen}
+            onOpenChange={(open) => {
+              setIsInviteOpen(open)
+              if (open) setInviteError(null)
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button" size="sm">
+                Invitar usuario
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Invitar usuario</DialogTitle>
+              </DialogHeader>
+              <InviteUserForm
+                errorMessage={inviteError}
+                isSubmitting={inviteUser.isPending}
+                onSubmit={handleInvite}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {inviteSuccess ? <SuccessBanner message={inviteSuccess} /> : null}
 
         {invitationsQuery.isLoading ? <Spinner label="Cargando invitaciones..." /> : null}
         {invitationsQuery.isError ? (

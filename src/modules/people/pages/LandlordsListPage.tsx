@@ -6,7 +6,19 @@
 // request (ver ForbiddenState).
 import { useState } from 'react'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, EmptyState, ForbiddenState } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  EmptyState,
+  ForbiddenState,
+  SuccessBanner,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { LandlordCreate } from '@/api/people.api'
 
@@ -26,6 +38,8 @@ export function LandlordsListPage() {
   const createLandlord = useCreateLandlord()
 
   const [createError, setCreateError] = useState<string | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
   if (!canReadLandlords) {
     return (
@@ -36,6 +50,10 @@ export function LandlordsListPage() {
   function handleCreate(values: LandlordCreate) {
     setCreateError(null)
     createLandlord.mutate(values, {
+      onSuccess: () => {
+        setIsCreateOpen(false)
+        setCreateSuccess('Propietario creado correctamente.')
+      },
       onError: (error) => setCreateError(resolveErrorMessage(error)),
     })
   }
@@ -47,8 +65,36 @@ export function LandlordsListPage() {
         <PeopleTabsNav />
       </header>
 
+      <section className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-muted-foreground">Propietarios</h2>
+        {canManageLandlords ? (
+          <Dialog
+            open={isCreateOpen}
+            onOpenChange={(open) => {
+              setIsCreateOpen(open)
+              if (open) setCreateError(null)
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button">Nuevo propietario</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nuevo propietario</DialogTitle>
+              </DialogHeader>
+              <LandlordForm
+                errorMessage={createError}
+                isSubmitting={createLandlord.isPending}
+                onSubmit={handleCreate}
+              />
+            </DialogContent>
+          </Dialog>
+        ) : null}
+      </section>
+
+      {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
+
       <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Propietarios</h2>
         {landlordsQuery.isLoading ? <Spinner label="Cargando propietarios..." /> : null}
         {landlordsQuery.isError ? (
           <ErrorState message={resolveErrorMessage(landlordsQuery.error)} />
@@ -60,16 +106,6 @@ export function LandlordsListPage() {
           <LandlordsTable landlords={landlordsQuery.data.data} />
         ) : null}
       </section>
-
-      {canManageLandlords ? (
-        <section>
-          <LandlordForm
-            errorMessage={createError}
-            isSubmitting={createLandlord.isPending}
-            onSubmit={handleCreate}
-          />
-        </section>
-      ) : null}
     </div>
   )
 }

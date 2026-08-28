@@ -9,7 +9,7 @@
 // "/superadmin/..." -> "/"). El guard/redirect real (`<Navigate>`) es el
 // mismo código de producción; sólo cambia el árbol de rutas que lo monta.
 import type { ReactElement } from 'react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 
@@ -48,6 +48,10 @@ export function renderShellApp(initialPath: string) {
             <Route path="account" element={stubPage('Mi cuenta')} />
           </Route>
           <Route path="/superadmin" element={<RequireSuperAdmin />}>
+            {/* issue #45: mismo árbol que src/superadmin/routes.tsx --
+                index route que evita la página en blanco al navegar/
+                recargar en "/superadmin" exacto (sin subpath matcheable). */}
+            <Route index element={<Navigate to="organizations" replace />} />
             <Route path="organizations" element={<OrganizationsListPage />} />
           </Route>
         </Routes>
