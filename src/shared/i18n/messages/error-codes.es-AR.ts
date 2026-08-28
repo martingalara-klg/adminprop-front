@@ -60,7 +60,9 @@ export const errorCodeMessages: Record<string, string> = {
   EXCHANGE_RATE_REQUIRED:
     'Se requiere el tipo de cambio porque la moneda del pago difiere de la del contrato.',
   PAYMENT_ALREADY_VOIDED: 'El cobro ya fue anulado.',
-  RENTER_HAS_DEBT: 'El inquilino tiene deuda pendiente.',
+  // Issue #104/#56, decisión #123: renombrado desde RENTER_HAS_DEBT — el
+  // libre deuda pasó a ser por CONTRATO (`POST /contracts/:id/debt-certificate`).
+  CONTRACT_HAS_DEBT: 'El contrato tiene deuda pendiente.',
 
   // ── Liquidaciones ────────────────────────────────────────────────────────
   SETTLEMENT_ALREADY_EXISTS: 'Ya existe una liquidación para este propietario y período.',

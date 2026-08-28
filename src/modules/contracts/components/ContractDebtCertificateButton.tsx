@@ -1,18 +1,22 @@
-// src/modules/payments/components/DebtCertificateButton.tsx
+// src/modules/contracts/components/ContractDebtCertificateButton.tsx
 //
-// RF-08 — CA-04-11/12: descarga (Fetch + Blob) del certificado de libre
-// deuda. Con deuda, el backend responde `422 RENTER_HAS_DEBT` con el
-// detalle de lo adeudado en `error.details` — se muestra inline en vez
-// de un mensaje genérico (docs/skills/error-handling.md).
+// Issue #56 punto 5 (espejo del back#104, decisión #123): descarga
+// (Fetch + Blob) del certificado de libre deuda DEL CONTRATO. Reemplaza
+// al viejo botón de la ficha del inquilino (`DebtCertificateButton` en
+// `modules/payments`, eliminado — su endpoint `POST
+// /renters/:id/debt-certificate` ya no existe). Con deuda, el backend
+// responde `422 CONTRACT_HAS_DEBT` con el detalle en `error.details` —
+// se muestra inline (docs/skills/error-handling.md), nunca un mensaje
+// genérico.
 import { useState } from 'react'
 import { Button } from '@/shared/components'
 import { AdminPropApiError } from '@/api/errors'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
-import { paymentsApi } from '@/api/payments.api'
+import { contractsApi } from '@/api/contracts.api'
 
-type Props = { renterId: string }
+type Props = { contractId: string }
 
-export function DebtCertificateButton({ renterId }: Props) {
+export function ContractDebtCertificateButton({ contractId }: Props) {
   const [isDownloading, setIsDownloading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [debtDetails, setDebtDetails] = useState<Record<string, unknown> | null>(null)
@@ -22,10 +26,10 @@ export function DebtCertificateButton({ renterId }: Props) {
     setDebtDetails(null)
     setIsDownloading(true)
     try {
-      await paymentsApi.downloadDebtCertificate(renterId)
+      await contractsApi.downloadDebtCertificate(contractId)
     } catch (error) {
       setErrorMessage(resolveErrorMessage(error))
-      if (error instanceof AdminPropApiError && error.code === 'RENTER_HAS_DEBT') {
+      if (error instanceof AdminPropApiError && error.code === 'CONTRACT_HAS_DEBT') {
         setDebtDetails(error.details)
       }
     } finally {
@@ -46,7 +50,7 @@ export function DebtCertificateButton({ renterId }: Props) {
       {debtDetails ? (
         <pre
           className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs"
-          data-testid="debt-certificate-details"
+          data-testid="contract-debt-certificate-details"
         >
           {JSON.stringify(debtDetails, null, 2)}
         </pre>

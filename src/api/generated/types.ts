@@ -737,37 +737,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/renters/{renter_id}/debt-certificate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Issue Debt Certificate
-         * @description sdd_03 §9 + RF-08: emite el certificado de libre deuda en PDF
-         *     (SINCRONICO) -- CA-04-11 (sin deuda, auditado como
-         *     `debt_certificate.issued`), CA-04-12 (con deuda -> `422
-         *     RENTER_HAS_DEBT` con el detalle en `details`, RN-P08).
-         *
-         *     Permiso `renter:read` (mismo criterio que `GET /renters/:id/debt`,
-         *     issue #23: emitir el certificado es una operacion de lectura/reporte
-         *     sobre el inquilino, no modifica sus datos).
-         *
-         *     `DebtCertificateService`/`ContractRepository`/`PropertyRepository`
-         *     se importan DIFERIDO -- mismo ciclo de import documentado en
-         *     `get_renter_debt` de este archivo.
-         */
-        post: operations["issue_debt_certificate_v1_renters__renter_id__debt_certificate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/properties": {
         parameters: {
             query?: never;
@@ -969,7 +938,9 @@ export interface paths {
         };
         /**
          * Get Contract
-         * @description RF-01: detalle del contrato.
+         * @description RF-01 + RF-06 (issue #106): detalle del contrato, incluido
+         *     `monthly_amounts[]` -- serie mensual de valores locativos, orden
+         *     DESCENDENTE (mes actual primero), calculada en el backend.
          */
         get: operations["get_contract_v1_contracts__contract_id__get"];
         put?: never;
@@ -1043,6 +1014,43 @@ export interface paths {
         get: operations["list_contract_adjustments_v1_contracts__contract_id__adjustments_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/contracts/{contract_id}/debt-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Contract Debt Certificate
+         * @description sdd_03 §8 + RF-08 (issue #104 -- movido desde `modules/people`,
+         *     decision del PO: el libre deuda es POR CONTRATO): emite el
+         *     certificado de libre deuda en PDF (SINCRONICO) -- CA-04-11 (sin
+         *     deuda, auditado como `debt_certificate.issued`), CA-04-12 (con
+         *     deuda -> `422 CONTRACT_HAS_DEBT` con el detalle en `details`, RN-P08).
+         *     Verifica SOLO los periodos de ESTE contrato -- no los de otros
+         *     contratos del mismo inquilino.
+         *
+         *     Permiso `contract:read` (no `renter:read`, ya que el recurso ahora
+         *     cuelga de `/contracts/:id`): emitir el certificado es una operacion
+         *     de lectura/reporte sobre el contrato, mismo criterio que
+         *     `GET /contracts/:id`/`GET /contracts/:id/adjustments`.
+         *
+         *     `DebtCertificateService`/`DebtService`/`RenterRepository`/
+         *     `PropertyRepository` se importan DIFERIDO -- ver el docstring de
+         *     `contracts/debt_certificate_service.py` para el ciclo de import que
+         *     evita (mismo criterio que documentaba `people/router.py.
+         *     issue_debt_certificate`, issue #24, ahora eliminado).
+         */
+        post: operations["issue_contract_debt_certificate_v1_contracts__contract_id__debt_certificate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2272,6 +2280,74 @@ export interface components {
             /** Current Amount Since */
             current_amount_since?: string | null;
         };
+        /**
+         * ContractDetail
+         * @description Respuesta de `GET /v1/contracts/:id` (issue #106): `ContractSummary`
+         *     + `monthly_amounts[]` en orden DESCENDENTE (mes actual primero). Solo
+         *     este endpoint la expone -- `POST`/`PATCH`/`activate`/`terminate`
+         *     siguen usando `ContractSummary`/`ContractResponse` sin este campo.
+         */
+        ContractDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Property Id
+             * Format: uuid
+             */
+            property_id: string;
+            /**
+             * Renter Id
+             * Format: uuid
+             */
+            renter_id: string;
+            /** Currency */
+            currency: string;
+            /** Initial Amount */
+            initial_amount: string;
+            /** Current Amount */
+            current_amount: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Daily Late Fee Pct */
+            daily_late_fee_pct: string;
+            /** Adjustment Frequency Months */
+            adjustment_frequency_months: number | null;
+            /** Adjustment Index */
+            adjustment_index: string | null;
+            /** Adjustment Index Notes */
+            adjustment_index_notes: string | null;
+            /** Status */
+            status: string;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Monthly Amounts */
+            monthly_amounts: components["schemas"]["MonthlyAmount"][];
+        };
+        /** ContractDetailResponse */
+        ContractDetailResponse: {
+            data: components["schemas"]["ContractDetail"];
+        };
         /** ContractListResponse */
         ContractListResponse: {
             /** Data */
@@ -2761,6 +2837,26 @@ export interface components {
             is_super_admin: boolean;
         };
         /**
+         * MonthlyAmount
+         * @description Item de `monthly_amounts[]` -- issue #106, `sdd_03` v1.12 §8.
+         *
+         *     `period` es el dia 1 del mes calendario (mismo criterio que
+         *     `due_period` de `ContractAdjustment`); `amount` es el monto vigente
+         *     de ESE mes, derivado en el backend desde `initial_amount` + ajustes
+         *     `applied` (RN-09 de `spec_module_03`). `from_attributes=True` porque
+         *     el service devuelve `monthly_amounts.MonthlyAmountRow` (dataclass),
+         *     no un dict.
+         */
+        MonthlyAmount: {
+            /**
+             * Period
+             * Format: date
+             */
+            period: string;
+            /** Amount */
+            amount: string;
+        };
+        /**
          * NeighborhoodCreate
          * @description Body de POST /v1/neighborhoods.
          */
@@ -3166,8 +3262,9 @@ export interface components {
             /**
              * Property Type
              * @default departamento
+             * @enum {string}
              */
-            property_type: string;
+            property_type: "departamento" | "casa" | "duplex" | "local" | "cochera" | "otro";
             /** Notes */
             notes?: string | null;
         };
@@ -3381,7 +3478,7 @@ export interface components {
             /** Neighborhood Id */
             neighborhood_id?: string | null;
             /** Property Type */
-            property_type?: string | null;
+            property_type?: ("departamento" | "casa" | "duplex" | "local" | "cochera" | "otro") | null;
             /** Status */
             status?: ("available" | "unavailable") | null;
             /** Notes */
@@ -5646,37 +5743,6 @@ export interface operations {
             };
         };
     };
-    issue_debt_certificate_v1_renters__renter_id__debt_certificate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                renter_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_properties_v1_properties_get: {
         parameters: {
             query?: {
@@ -6176,7 +6242,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContractResponse"];
+                    "application/json": components["schemas"]["ContractDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6309,6 +6375,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdjustmentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_contract_debt_certificate_v1_contracts__contract_id__debt_certificate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

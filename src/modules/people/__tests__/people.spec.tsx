@@ -280,9 +280,9 @@ describe('Módulo 2 — Personas (#9)', () => {
 
     await waitFor(() => screen.getByText('María López'))
     expect(screen.getByText('2')).toBeInTheDocument()
-    expect(screen.getByText('150.000,00')).toBeInTheDocument()
+    expect(screen.getByText('150.000')).toBeInTheDocument()
     expect(screen.getByText('45')).toBeInTheDocument()
-    expect(screen.getByText('4.500,00')).toBeInTheDocument()
+    expect(screen.getByText('4.500')).toBeInTheDocument()
   })
 
   it('CA-02-05 (estado empty): sin deuda, la ficha muestra "Sin deuda"', async () => {

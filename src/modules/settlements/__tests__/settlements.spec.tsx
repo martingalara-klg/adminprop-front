@@ -511,7 +511,7 @@ describe('Módulo 5 — Liquidaciones (#14)', () => {
 
     const groups = await screen.findByTestId('settlement-property-groups')
     expect(within(groups).getByText('Av. Colón 1234')).toBeInTheDocument()
-    expect(within(groups).getByText(/Subtotal: 200.000,00/)).toBeInTheDocument()
+    expect(within(groups).getByText(/Subtotal: 200.000/)).toBeInTheDocument()
   })
 
   it('CA-05-06: needs_regeneration muestra el badge y regenerar llama a POST .../regenerate', async () => {

@@ -23,18 +23,21 @@ vi.mock('@/api/contracts.api', () => ({
     listAdjustments: vi.fn(),
     listPendingAdjustments: vi.fn(),
     applyAdjustment: vi.fn(),
+    downloadDebtCertificate: vi.fn(),
   },
 }))
 
 vi.mock('@/api/properties.api', () => ({
   propertiesApi: {
     list: vi.fn(),
+    get: vi.fn(),
   },
 }))
 
 vi.mock('@/api/people.api', () => ({
   peopleApi: {
     listRenters: vi.fn(),
+    getRenter: vi.fn(),
   },
 }))
 
@@ -50,10 +53,26 @@ const OWNER_SESSION = buildSession({
   permissions: [
     'contract:read',
     'contract:manage',
+    // Issue #56/#105, decisión #124: `contract:terminate` es exclusivo
+    // de owner (admin conserva contract:manage para el resto del ciclo
+    // de vida, pero no termina contratos).
+    'contract:terminate',
     'adjustment:apply',
     'property:read',
     'renter:read',
   ],
+  isSuperAdmin: false,
+})
+
+// Issue #56 punto 4: admin conserva `contract:manage` (activar/editar)
+// pero NO `contract:terminate` — el botón de terminar debe quedar
+// oculto para este rol.
+const ADMIN_SESSION = buildSession({
+  userId: 'u-admin',
+  email: 'admin@inmobiliaria-sur.com',
+  fullName: 'Admin Uno',
+  organization: { id: 'org-1', name: 'Inmobiliaria Sur', role: 'admin' },
+  permissions: ['contract:read', 'contract:manage', 'property:read', 'renter:read'],
   isSuperAdmin: false,
 })
 
@@ -111,6 +130,22 @@ const RENTERS = {
   meta: {},
 }
 
+const PROPERTY_DETAIL = {
+  data: {
+    ...PROPERTIES.data[0]!,
+    notes: null,
+    updated_at: '2026-08-01T00:00:00Z',
+    service_accounts: [],
+  },
+}
+const RENTER_DETAIL = { data: RENTERS.data[0]! }
+
+const MONTHLY_AMOUNTS = [
+  { period: '2026-03-01', amount: '110000.00' },
+  { period: '2026-02-01', amount: '100000.00' },
+  { period: '2026-01-01', amount: '100000.00' },
+]
+
 const DRAFT_CONTRACT_ARS = {
   id: 'c-1',
   property_id: 'p-1',
@@ -128,6 +163,7 @@ const DRAFT_CONTRACT_ARS = {
   notes: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+  monthly_amounts: MONTHLY_AMOUNTS,
 }
 
 const ACTIVE_CONTRACT = { ...DRAFT_CONTRACT_ARS, id: 'c-2', status: 'active' }
@@ -135,6 +171,11 @@ const ACTIVE_CONTRACT = { ...DRAFT_CONTRACT_ARS, id: 'c-2', status: 'active' }
 function mockOptionDefaults() {
   vi.mocked(propertiesApi.list).mockResolvedValue(PROPERTIES)
   vi.mocked(peopleApi.listRenters).mockResolvedValue(RENTERS)
+}
+
+function mockDetailLinkDefaults() {
+  vi.mocked(propertiesApi.get).mockResolvedValue(PROPERTY_DETAIL)
+  vi.mocked(peopleApi.getRenter).mockResolvedValue(RENTER_DETAIL)
 }
 
 // Issue #48: el form de alta vive en un modal — helper que lo abre desde
@@ -270,6 +311,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
   it('CA-03-01/02: el owner activa un contrato draft con confirmación explícita', async () => {
     setSession(OWNER_SESSION)
+    mockDetailLinkDefaults()
     vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
     vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
     vi.mocked(contractsApi.activate).mockResolvedValueOnce({
@@ -289,6 +331,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
   it('CA-03-08: el owner termina un contrato activo con motivo obligatorio', async () => {
     setSession(OWNER_SESSION)
+    mockDetailLinkDefaults()
     vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
     vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
     vi.mocked(contractsApi.terminate).mockResolvedValueOnce({
@@ -385,7 +428,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
     await user.click(await screen.findByRole('button', { name: 'Ingresar % de ajuste' }))
     await user.type(screen.getByLabelText('% de ajuste'), '10')
 
-    expect(await screen.findByTestId('adjustment-preview')).toHaveTextContent('110.000,00')
+    expect(await screen.findByTestId('adjustment-preview')).toHaveTextContent('110.000')
 
     await user.click(screen.getByRole('button', { name: 'Aplicar ajuste' }))
 
@@ -478,6 +521,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
   it('CA-03-06 (lectura): el monto vigente no tiene ningún control de edición en la ficha', async () => {
     setSession(OWNER_SESSION)
+    mockDetailLinkDefaults()
     vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
     vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
 
@@ -485,7 +529,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
     await waitFor(() => screen.getByTestId('contract-detail'))
     expect(screen.queryByLabelText('Monto vigente')).not.toBeInTheDocument()
-    expect(screen.getByTestId('contract-detail')).toHaveTextContent('100.000,00')
+    // Issue #56 punto 2: sin centavos cuando son ,00.
+    expect(screen.getByTestId('contract-detail')).toHaveTextContent('100.000')
+    expect(screen.getByTestId('contract-detail')).not.toHaveTextContent('100.000,00')
   })
 
   it('un usuario sin adjustment:apply ve la bandeja pero no puede aplicar ajustes', async () => {
@@ -759,6 +805,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
     it('CA-03-11: el historial distingue la "Carga inicial" de un ajuste % común', async () => {
       setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
       vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
       vi.mocked(contractsApi.listAdjustments).mockResolvedValue({
         data: [
@@ -786,6 +833,133 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(screen.getByText('Carga inicial')).toBeInTheDocument()
       expect(screen.getByTestId('initial-load-badge-adj-initial')).toBeInTheDocument()
       expect(screen.queryByText('null%')).not.toBeInTheDocument()
+    })
+  })
+
+  // Issue #56 — pulido #2 del PO (cierra #38) ────────────────────────────
+  describe('Issue #56 — pulido del módulo Contratos', () => {
+    it('CA-56-01: el listado y la ficha muestran el estado con badge legible (cierra #38)', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [ACTIVE_CONTRACT], meta: {} })
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      expect(await screen.findByText('Activo')).toBeInTheDocument()
+
+      renderContractsApp('/contracts/c-2')
+      // La ficha ya no muestra el status crudo del backend (#38).
+      expect(screen.queryByText('Estado: active')).not.toBeInTheDocument()
+      expect(await screen.findAllByText('Activo')).not.toHaveLength(0)
+    })
+
+    it('CA-56-02: el listado muestra los montos sin centavos cuando son ,00', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [DRAFT_CONTRACT_ARS], meta: {} })
+
+      renderContractsApp('/contracts')
+
+      expect(await screen.findByText('100.000')).toBeInTheDocument()
+      expect(screen.queryByText('100.000,00')).not.toBeInTheDocument()
+    })
+
+    it('CA-56-03: la ficha muestra propiedad e inquilino linkeados, monto inicial, índice y notas', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({
+        data: { ...ACTIVE_CONTRACT, notes: 'Inquilino solicitó recibo por mail.' },
+      })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+
+      const detail = await screen.findByTestId('contract-detail')
+      const propertyLink = await screen.findByRole('link', { name: 'Av. Colón 1234' })
+      expect(propertyLink).toHaveAttribute('href', '/properties/p-1')
+      const renterLink = screen.getByRole('link', { name: 'María López' })
+      expect(renterLink).toHaveAttribute('href', '/people/renters/r-1')
+      expect(detail).toHaveTextContent('ICL')
+      expect(detail).toHaveTextContent('Inquilino solicitó recibo por mail.')
+    })
+
+    it('CA-56-04: sólo un usuario con contract:terminate ve el botón de terminar (owner sí, admin no)', async () => {
+      setSession(ADMIN_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+      await screen.findByTestId('contract-detail')
+      expect(screen.queryByRole('button', { name: 'Terminar contrato' })).not.toBeInTheDocument()
+
+      setSession(OWNER_SESSION)
+      renderContractsApp('/contracts/c-2')
+      expect(
+        await screen.findByRole('button', { name: 'Terminar contrato' }),
+      ).toBeInTheDocument()
+    })
+
+    it('CA-56-05: el owner descarga el certificado de libre deuda del contrato', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.downloadDebtCertificate).mockResolvedValueOnce(undefined)
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
+      )
+
+      await waitFor(() => {
+        expect(contractsApi.downloadDebtCertificate).toHaveBeenCalledWith('c-2')
+      })
+    })
+
+    it('CA-56-05: 422 CONTRACT_HAS_DEBT muestra el detalle de lo adeudado del contrato', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.downloadDebtCertificate).mockRejectedValueOnce(
+        new AdminPropApiError('CONTRACT_HAS_DEBT', 422, 'El contrato tiene deuda pendiente.', null, {
+          overdue_periods: 2,
+          balance: '200000.00',
+        }),
+      )
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('El contrato tiene deuda pendiente.')).toBeInTheDocument()
+      })
+      expect(screen.getByTestId('contract-debt-certificate-details')).toHaveTextContent(
+        'overdue_periods',
+      )
+    })
+
+    it('CA-56-06: la ficha muestra el historial de valores locativos mes a mes', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+
+      const history = await screen.findByTestId('monthly-amounts-history')
+      // MONTHLY_AMOUNTS[0] es "110000.00" (2026-03) — con centavos ocultos.
+      expect(history).toHaveTextContent('110.000')
+      expect(history).not.toHaveTextContent('110.000,00')
     })
   })
 })

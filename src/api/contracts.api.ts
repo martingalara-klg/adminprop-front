@@ -9,22 +9,29 @@
 //
 //   GET    /contracts                        (?status=&expiring_in_days=)
 //   POST   /contracts                        (valida CONTRACT_OVERLAP, RN-C02)
-//   GET    /contracts/:id
+//   GET    /contracts/:id                    (incluye monthly_amounts[] — issue #106/#56)
 //   PATCH  /contracts/:id                    (solo notes/end_date; montos NUNCA — RN-C04)
 //   POST   /contracts/:id/activate           (draft → active)
-//   POST   /contracts/:id/terminate           (active → terminated; body: { reason })
+//   POST   /contracts/:id/terminate           (active → terminated; body: { reason }; permiso contract:terminate — issue #105/#56)
 //   GET    /contracts/:id/adjustments        (historial de ajustes)
 //   GET    /adjustments                      (?status=pending — bandeja)
 //   POST   /adjustments/:id/apply            (body: { pct })
+//   POST   /contracts/:id/debt-certificate   (libre deuda del contrato, PDF — issue #104/#56;
+//                                              reemplaza a POST /renters/:id/debt-certificate,
+//                                              eliminado del backend)
 import { httpClient } from './http-client'
+import { downloadFile } from './download'
 import type { components } from './generated/types'
 
 export type ContractSummary = components['schemas']['ContractSummary']
+export type ContractDetail = components['schemas']['ContractDetail']
 export type ContractCreate = components['schemas']['ContractCreate']
 export type ContractUpdate = components['schemas']['ContractUpdate']
 export type ContractTerminateRequest = components['schemas']['ContractTerminateRequest']
 export type ContractListResponse = components['schemas']['ContractListResponse']
 export type ContractResponse = components['schemas']['ContractResponse']
+export type ContractDetailResponse = components['schemas']['ContractDetailResponse']
+export type MonthlyAmount = components['schemas']['MonthlyAmount']
 
 export type AdjustmentSummary = components['schemas']['AdjustmentSummary']
 export type AdjustmentApplyRequest = components['schemas']['AdjustmentApplyRequest']
@@ -54,8 +61,9 @@ export const contractsApi = {
     return response.data
   },
 
-  async get(contractId: string, opts?: { signal?: AbortSignal }): Promise<ContractResponse> {
-    const response = await httpClient.get<ContractResponse>(`/contracts/${contractId}`, {
+  /** v1.12 (issue #106): incluye `monthly_amounts[]` — valor locativo mes a mes, más reciente primero. */
+  async get(contractId: string, opts?: { signal?: AbortSignal }): Promise<ContractDetailResponse> {
+    const response = await httpClient.get<ContractDetailResponse>(`/contracts/${contractId}`, {
       signal: opts?.signal,
     })
     return response.data
@@ -138,5 +146,18 @@ export const contractsApi = {
       payload,
     )
     return response.data
+  },
+
+  // ── Libre deuda del contrato (Fetch + Blob, POST) ────────────────────────
+  /**
+   * Issue #104/#56, decisión #123: reemplaza a `POST /renters/:id/debt-certificate`
+   * (eliminado) — el libre deuda es por CONTRATO, verifica sólo los
+   * períodos de ese contrato. `422 CONTRACT_HAS_DEBT` con el detalle de
+   * lo adeudado en `details`. Permiso `contract:read`.
+   */
+  async downloadDebtCertificate(contractId: string): Promise<void> {
+    await downloadFile(`/contracts/${contractId}/debt-certificate`, `libre-deuda-${contractId}.pdf`, {
+      method: 'POST',
+    })
   },
 }

@@ -6,7 +6,7 @@
 // historial de cobros del período (`payments[]`, incluye anulados) con
 // recibo/anulación por fila.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
@@ -24,7 +24,6 @@ vi.mock('@/api/payments.api', () => ({
     voidPayment: vi.fn(),
     listDebt: vi.fn(),
     downloadReceipt: vi.fn(),
-    downloadDebtCertificate: vi.fn(),
   },
 }))
 
@@ -44,7 +43,6 @@ vi.mock('@/api/people.api', () => ({
 import { paymentsApi } from '@/api/payments.api'
 import { propertiesApi } from '@/api/properties.api'
 import { peopleApi } from '@/api/people.api'
-import { DebtCertificateButton } from '../components/DebtCertificateButton'
 
 const OWNER_SESSION = buildSession({
   userId: 'u-owner',
@@ -179,7 +177,7 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     expect(within(table).getByText('Av. Colón 1234')).toBeInTheDocument()
     expect(within(table).getByText('María López')).toBeInTheDocument()
     expect(within(table).getByText('En mora')).toBeInTheDocument()
-    expect(within(table).getAllByText(/500,00/).length).toBeGreaterThan(0)
+    expect(within(table).getAllByText(/^500$/).length).toBeGreaterThan(0)
   })
 
   it('un maintenance no ve el panel de cobranzas ni dispara el request', async () => {
@@ -258,7 +256,7 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     const user = userEvent.setup()
 
     await waitFor(() => screen.getByTestId('suggested-interest'))
-    await waitFor(() => expect(screen.getByTestId('suggested-interest')).toHaveTextContent('500,00'))
+    await waitFor(() => expect(screen.getByTestId('suggested-interest')).toHaveTextContent('500'))
 
     await user.type(screen.getByLabelText('Importe a capital (ARS)'), '100000')
     await user.type(screen.getByLabelText('Interés cobrado'), '200')
@@ -272,9 +270,9 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     })
 
     const row = await screen.findByTestId('payment-history-row')
-    expect(row).toHaveTextContent('500,00') // sugerido
-    expect(row).toHaveTextContent('200,00') // cobrado
-    expect(row).toHaveTextContent('300,00') // perdonado
+    expect(row).toHaveTextContent('500') // sugerido
+    expect(row).toHaveTextContent('200') // cobrado
+    expect(row).toHaveTextContent('300') // perdonado
   })
 
   it('CA-04-04: el saldo excedido devuelve 422 PAYMENT_EXCEEDS_CONTRACT_BALANCE', async () => {
@@ -343,10 +341,10 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     expect(row).toHaveTextContent(formatDate('2026-07-15'))
     expect(row).toHaveTextContent('Transferencia')
     expect(row).toHaveTextContent('USD')
-    expect(row).toHaveTextContent('100,00')
+    expect(row).toHaveTextContent('100')
     expect(row).toHaveTextContent('1000.0000')
     expect(row).toHaveTextContent('Directo al propietario (ya rendido)')
-    expect(row).toHaveTextContent('500,00') // sugerido
+    expect(row).toHaveTextContent('500') // sugerido
     expect(row).toHaveTextContent('Pago parcial en USD')
   })
 
@@ -578,35 +576,9 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     })
   })
 
-  it('CA-04-10 (descarga directa): DebtCertificateButton descarga el PDF cuando el inquilino no tiene deuda', async () => {
-    vi.mocked(paymentsApi.downloadDebtCertificate).mockResolvedValueOnce(undefined)
-
-    render(<DebtCertificateButton renterId="r-1" />)
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Descargar certificado de libre deuda' }))
-
-    await waitFor(() => {
-      expect(paymentsApi.downloadDebtCertificate).toHaveBeenCalledWith('r-1')
-    })
-  })
-
-  it('CA-04-12: DebtCertificateButton muestra 422 RENTER_HAS_DEBT con el detalle de lo adeudado', async () => {
-    vi.mocked(paymentsApi.downloadDebtCertificate).mockRejectedValueOnce(
-      new AdminPropApiError('RENTER_HAS_DEBT', 422, 'El inquilino tiene deuda pendiente.', null, {
-        overdue_periods: 2,
-        balance: '200000.00',
-      }),
-    )
-
-    render(<DebtCertificateButton renterId="r-1" />)
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Descargar certificado de libre deuda' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('El inquilino tiene deuda pendiente.')).toBeInTheDocument()
-    })
-    expect(screen.getByTestId('debt-certificate-details')).toHaveTextContent('overdue_periods')
-  })
+  // CA-04-10/12 (descarga de libre deuda): movido al módulo Contratos —
+  // issue #104/#56, decisión #123. El endpoint `POST
+  // /renters/:id/debt-certificate` fue eliminado del backend; el libre
+  // deuda ahora es por CONTRATO (`ContractDebtCertificateButton`, ver
+  // `src/modules/contracts/__tests__/contracts.spec.tsx`).
 })

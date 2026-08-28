@@ -3,6 +3,14 @@
 // RF-03 + CA-03-01/02/08: `draft → active` (confirmación simple) y
 // `active → terminated` (confirmación + motivo obligatorio). Mismo
 // patrón de 2 pasos que ConfirmDeleteButton (shared/components).
+//
+// Issue #56 punto 4 (decisión #124, back#105): terminar un contrato es
+// AHORA un permiso atómico separado (`contract:terminate`, sólo
+// `owner`) — distinto de `contract:manage` (que sigue habilitando
+// activar/editar, y lo tienen owner y admin). El trigger de terminación
+// es "discreto": link de texto tenue en vez del banner/botón rojo
+// gigante que había antes — el paso de confirmación (con motivo
+// obligatorio) sigue siendo destructivo/explícito, eso no cambia.
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -12,6 +20,7 @@ import { terminateContractSchema, type TerminateContractInput } from '../schemas
 type Props = {
   status: string
   canManage: boolean
+  canTerminate: boolean
   isActivating: boolean
   isTerminating: boolean
   activateError: string | null
@@ -23,6 +32,7 @@ type Props = {
 export function ContractLifecycleActions({
   status,
   canManage,
+  canTerminate,
   isActivating,
   isTerminating,
   activateError,
@@ -42,11 +52,11 @@ export function ContractLifecycleActions({
     defaultValues: { reason: '' },
   })
 
-  if (!canManage) return null
+  if (!canManage && !canTerminate) return null
 
   return (
     <div className="flex flex-col gap-4">
-      {status === 'draft' ? (
+      {status === 'draft' && canManage ? (
         <div className="flex flex-col gap-2">
           {!isConfirmingActivate ? (
             <Button type="button" onClick={() => setIsConfirmingActivate(true)}>
@@ -81,12 +91,14 @@ export function ContractLifecycleActions({
         </div>
       ) : null}
 
-      {status === 'active' ? (
+      {status === 'active' && canTerminate ? (
         <div className="flex flex-col gap-2">
           {!isTerminating2Step ? (
             <Button
               type="button"
-              variant="destructive"
+              variant="ghost"
+              size="sm"
+              className="self-start text-muted-foreground hover:text-destructive"
               onClick={() => setIsTerminating2Step(true)}
             >
               Terminar contrato
