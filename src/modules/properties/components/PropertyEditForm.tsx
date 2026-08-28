@@ -186,19 +186,20 @@ export function PropertyEditForm({
         </p>
       ) : null}
 
-      {/* issue #55 (punto 3, CA-55-03): el PO reportó que elegir un barrio
-          en una propiedad legacy (`neighborhood_id: null`) dejaba
-          "Guardar cambios" deshabilitado, con sospecha de que el gate
-          dependía de `formState.isDirty`/`isValid` de RHF junto a
-          `defaultValues.neighborhood_id: ''`. Investigado: el `disabled`
-          de este botón SOLO depende de `isSubmitting`, `isRented` y
-          `hasNeighborhoods` (catálogo no vacío) — ninguno cambia al
-          seleccionar un barrio, y NUNCA se usó `isDirty`/`isValid` acá.
-          No reproduce; ver test de regresión CA-55-03 en
-          properties.spec.tsx que fija el comportamiento correcto
-          (habilitado tras elegir barrio, envío exitoso). */}
+      {/* issue #55 (punto 3, CA-55-03) — root cause encontrado: RF-01/RF-02
+          de spec_module_01_propiedades.md dicen "edición de TODOS los
+          campos salvo el estado `rented` (derivado)" — una propiedad
+          alquilada se puede seguir editando (dirección, propietario,
+          barrio, tipo, notas); SOLO el campo `status` queda de solo
+          lectura (ya se muestra como texto arriba, nunca como select).
+          El botón incluía `isRented` en el `disabled`, bloqueando
+          indebidamente el guardado completo de propiedades `rented` —
+          eso es lo que el PO reprodujo al elegir un barrio en una
+          propiedad legacy que además estaba alquilada. Ver test de
+          regresión CA-55-03 en properties.spec.tsx (falla sin el fix,
+          pasa con él). */}
       <div>
-        <Button type="submit" disabled={isSubmitting || isRented || !hasNeighborhoods}>
+        <Button type="submit" disabled={isSubmitting || !hasNeighborhoods}>
           {isSubmitting ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </div>
