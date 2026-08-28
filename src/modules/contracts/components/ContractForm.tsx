@@ -55,7 +55,6 @@ export function ContractForm({
     register,
     control,
     handleSubmit,
-    reset,
     watch,
     setError,
     formState: { errors },
@@ -105,9 +104,15 @@ export function ContractForm({
   return (
     <form
       className="flex flex-col gap-4 rounded-md border p-4"
+      // Issue #57: NO resetear acá incondicionalmente — `onSubmit` es
+      // fire-and-forget (`mutate`, no `mutateAsync`), así que un reset
+      // inmediato borraba el form ANTES de que el backend responda,
+      // ocultando errores de campo inline (ej: VALIDATION_ERROR de
+      // historical_amounts) en cuanto llegaban. El padre
+      // (ContractsListPage) cierra el modal en `onSuccess`, lo que ya
+      // desmonta/reinicia este form — no hace falta duplicarlo acá.
       onSubmit={handleSubmit((values) => {
         onSubmit(values)
-        reset()
       })}
       noValidate
     >

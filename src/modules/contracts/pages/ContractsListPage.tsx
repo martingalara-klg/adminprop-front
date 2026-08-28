@@ -83,9 +83,13 @@ export function ContractsListPage() {
     // (`current_amount`/`current_amount_since`) — mutuamente
     // excluyentes, sdd_03 §8.
     const usesTramos = !!adjustmentFrequencyMonths
+    // Zod ya validó (superRefine) que ningún tramo quede vacío antes de
+    // llegar acá — el `.filter` sólo achica el tipo para el payload
+    // (`historical_amounts` puede tener huecos `undefined` a nivel de
+    // tipo de RHF mientras el usuario todavía está completando el form).
     const historicalAmounts =
       values.is_in_progress && usesTramos && values.historical_amounts?.length
-        ? values.historical_amounts
+        ? values.historical_amounts.filter((value): value is string => !!value)
         : undefined
 
     createContract.mutate(

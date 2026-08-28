@@ -78,7 +78,12 @@ export const createContractSchema = z
     current_amount_since: z.string().optional().or(z.literal('')),
     // Issue #57 — RN-C06 v2: un valor por tramo transcurrido, en orden.
     // Sólo aplica cuando currency=ARS y hay adjustment_frequency_months.
-    historical_amounts: z.array(z.string()).optional(),
+    // Elementos `.optional()`: RHF puede mantener índices sin valor
+    // (Controller montado pero sin tocar) como `undefined` explícito, no
+    // ausente — con `z.string()` a secas eso dispara el "Required"
+    // genérico de zod ANTES de llegar al superRefine de abajo, pisando
+    // el mensaje específico por tramo ("Ingresá el monto de...").
+    historical_amounts: z.array(z.string().optional()).optional(),
   })
   .superRefine((values, ctx) => {
     if (values.end_date && values.start_date && values.end_date <= values.start_date) {
