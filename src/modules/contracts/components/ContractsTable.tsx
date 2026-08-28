@@ -5,13 +5,7 @@
 import { Link } from 'react-router-dom'
 import type { ContractSummary } from '@/api/contracts.api'
 import { formatDate, formatMoney } from '@/shared/utils/format'
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Borrador',
-  active: 'Activo',
-  terminated: 'Terminado',
-  expired: 'Vencido',
-}
+import { ContractStateBadge } from './ContractStateBadge'
 
 type Props = {
   contracts: ContractSummary[]
@@ -32,7 +26,9 @@ export function ContractsTable({ contracts }: Props) {
       <tbody>
         {contracts.map((contract) => (
           <tr key={contract.id} className="border-b last:border-0">
-            <td className="py-2">{STATUS_LABELS[contract.status] ?? contract.status}</td>
+            <td className="py-2">
+              <ContractStateBadge status={contract.status} />
+            </td>
             <td className="py-2">{contract.currency}</td>
             <td className="py-2">{formatMoney(contract.current_amount)}</td>
             <td className="py-2">
