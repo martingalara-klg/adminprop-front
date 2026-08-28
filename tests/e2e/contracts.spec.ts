@@ -59,13 +59,15 @@ test.describe('UC-CONTRATOS — Alta y activación de contrato', () => {
 
     await draftRow.getByRole('link', { name: 'Ver contrato' }).click()
     await expect(page).toHaveURL(/\/contracts\/[^/]+$/)
-    await expect(page.getByText('Estado: draft')).toBeVisible()
+    // Issue #56 (cierra #38): la ficha ya no muestra el status crudo del
+    // backend — badge legible es-AR, igual que el listado.
+    await expect(page.getByText('Borrador', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Activar contrato' }).click()
     await page.getByRole('button', { name: 'Confirmar activación' }).click()
 
     // RF-03: `draft -> active`, sin CONTRACT_OVERLAP porque la propiedad
     // sembrada no tiene otro contrato activo vigente.
-    await expect(page.getByText('Estado: active')).toBeVisible()
+    await expect(page.getByText('Activo', { exact: true })).toBeVisible()
   })
 })

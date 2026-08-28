@@ -256,6 +256,11 @@ export function PropertyDetailPage() {
             </Dialog>
           ) : null}
         </div>
+        <p className="text-xs text-muted-foreground">
+          Estos conceptos (renta, expensas, municipal, etc.) se verifican todos los meses en el
+          checklist de la liquidación y su importe se descuenta al propietario en la rendición —
+          la carga del importe mensual se hace desde el módulo de liquidaciones, no acá.
+        </p>
         {chargeSuccess ? <SuccessBanner message={chargeSuccess} /> : null}
         <PropertyRecurringCharges charges={recurringCharges} />
       </section>
