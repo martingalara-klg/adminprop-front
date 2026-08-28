@@ -10,7 +10,12 @@
 //   GET  /auth/reset-password/:token → 200 | 404 | 410
 //   POST /auth/reset-password     → 200
 //   GET  /auth/me                 → 200 { data: { user, organization, role, permissions[], is_super_admin } } | 401 | 403 MEMBERSHIP_INACTIVE
-import { AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH, AUTH_ME_PATH, AUTH_REFRESH_PATH, httpClient } from './http-client'
+// issue #23: las rutas vienen de `auth.paths.ts` (módulo neutral, sin
+// dependencias de `http-client.ts` ni de este archivo) -- antes se
+// importaban desde `./http-client`, lo que era la otra arista del ciclo
+// `http-client.ts ⇄ auth.api.ts` (issue #21).
+import { AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH, AUTH_ME_PATH, AUTH_REFRESH_PATH } from './auth.paths'
+import { httpClient } from './http-client'
 import type { components } from './generated/types'
 
 type LoginResponse = components['schemas']['LoginResponse']
