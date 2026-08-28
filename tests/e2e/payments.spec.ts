@@ -57,8 +57,9 @@ test.describe('UC-COBRANZAS — Cobro con mora perdonada', () => {
     await page.getByLabel('Fecha de pago').fill(paymentDate)
 
     // Interés sugerido calculado por el backend a la fecha de pago
-    // (RN-P02/P03) -- 15 días de mora × 1% × 100.000 = 15.000,00 ARS.
-    await expect(page.getByTestId('suggested-interest')).toHaveText('15.000,00 ARS')
+    // (RN-P02/P03) -- 15 días de mora × 1% × 100.000 = 15.000 ARS.
+    // Issue #56 punto 2: formatMoney oculta los centavos cuando son ,00.
+    await expect(page.getByTestId('suggested-interest')).toHaveText('15.000 ARS')
 
     await page.getByLabel('Medio').selectOption('cash')
     await page.getByLabel('Moneda del pago').selectOption('ARS')
@@ -67,7 +68,7 @@ test.describe('UC-COBRANZAS — Cobro con mora perdonada', () => {
     // Perdón parcial: cobra 5.000 de los 15.000 sugeridos -> 10.000 perdonados.
     await page.getByLabel('Interés cobrado').fill('5000')
 
-    await expect(page.getByTestId('forgiven-interest-preview')).toHaveText('10.000,00 ARS')
+    await expect(page.getByTestId('forgiven-interest-preview')).toHaveText('10.000 ARS')
 
     await page.getByRole('button', { name: 'Registrar cobro' }).click()
 
@@ -81,8 +82,8 @@ test.describe('UC-COBRANZAS — Cobro con mora perdonada', () => {
 
     // El cobro en el historial muestra sugerido/cobrado/perdonado.
     const historyRow = page.getByTestId('payment-history-row').first()
-    await expect(historyRow.locator('td').nth(6)).toHaveText('15.000,00') // sugerido
-    await expect(historyRow.locator('td').nth(7)).toHaveText('5.000,00') // cobrado
-    await expect(historyRow.locator('td').nth(8)).toHaveText('10.000,00') // perdonado
+    await expect(historyRow.locator('td').nth(6)).toHaveText('15.000') // sugerido
+    await expect(historyRow.locator('td').nth(7)).toHaveText('5.000') // cobrado
+    await expect(historyRow.locator('td').nth(8)).toHaveText('10.000') // perdonado
   })
 })
