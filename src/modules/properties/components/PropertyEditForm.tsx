@@ -55,7 +55,11 @@ export function PropertyEditForm({
       address: property.address,
       landlord_id: property.landlord_id,
       neighborhood_id: property.neighborhood_id ?? '',
-      property_type: property.property_type,
+      // `PropertyDetail.property_type` sigue siendo `string` (lectura,
+      // legacy incluido); `UpdatePropertyInput` ya exige el enum cerrado
+      // (decisión #103) — cast seguro porque el select del form sólo
+      // ofrece `PROPERTY_TYPE_OPTIONS`.
+      property_type: property.property_type as UpdatePropertyInput['property_type'],
       // RF-04: `rented` es derivado — el form nunca lo ofrece; si la
       // propiedad está `rented`, el select queda en `available` como
       // placeholder inerte (el submit no cambia el estado real salvo

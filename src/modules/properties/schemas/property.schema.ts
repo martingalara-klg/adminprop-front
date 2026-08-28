@@ -52,7 +52,11 @@ const landlordIdField = z.string().min(1, 'Seleccioná un propietario.')
 // columna sea nullable en DB por datos legacy).
 const neighborhoodIdField = z.string().min(1, 'Seleccioná un barrio.')
 
-const propertyTypeField = z.string().max(50, 'El tipo no puede superar los 50 caracteres.')
+// El backend (decisión #103, ya reflejada en el OpenAPI regenerado)
+// restringió `property_type` a un enum cerrado — coincide exactamente
+// con `PROPERTY_TYPE_OPTIONS` (antes se documentaba como texto libre
+// corto en sdd_02, comportamiento ya superado).
+const propertyTypeField = z.enum(PROPERTY_TYPE_OPTIONS)
 
 const notesField = z.string().optional().or(z.literal(''))
 
