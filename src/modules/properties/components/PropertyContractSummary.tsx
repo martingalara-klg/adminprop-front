@@ -27,38 +27,51 @@ export function PropertyContractSummary({ contract, renterName }: Props) {
   }
 
   return (
-    <dl className="grid grid-cols-2 gap-3 text-sm" data-testid="property-active-contract">
+    <div className="flex flex-col gap-3" data-testid="property-active-contract">
+      <dl className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <dt className="text-muted-foreground">Inquilino</dt>
+          <dd>
+            {renterName ? (
+              <Link
+                to={`/people/renters/${contract.renter_id}`}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {renterName}
+              </Link>
+            ) : (
+              '—'
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Monto actual</dt>
+          <dd>
+            {formatMoney(contract.current_amount)}{' '}
+            {CURRENCY_LABELS[contract.currency] ?? contract.currency}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Vigencia</dt>
+          <dd>
+            {formatDate(contract.start_date)} – {formatDate(contract.end_date)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">% mora diaria</dt>
+          <dd>{contract.daily_late_fee_pct}%</dd>
+        </div>
+      </dl>
+      {/* issue #55 (punto 4): link directo a la ficha del contrato, mismo
+          patrón que el link al inquilino de arriba. */}
       <div>
-        <dt className="text-muted-foreground">Inquilino</dt>
-        <dd>
-          {renterName ? (
-            <Link
-              to={`/people/renters/${contract.renter_id}`}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              {renterName}
-            </Link>
-          ) : (
-            '—'
-          )}
-        </dd>
+        <Link
+          to={`/contracts/${contract.id}`}
+          className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Ver contrato
+        </Link>
       </div>
-      <div>
-        <dt className="text-muted-foreground">Monto actual</dt>
-        <dd>
-          {formatMoney(contract.current_amount)} {CURRENCY_LABELS[contract.currency] ?? contract.currency}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted-foreground">Vigencia</dt>
-        <dd>
-          {formatDate(contract.start_date)} – {formatDate(contract.end_date)}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted-foreground">% mora diaria</dt>
-        <dd>{contract.daily_late_fee_pct}%</dd>
-      </div>
-    </dl>
+    </div>
   )
 }

@@ -5,13 +5,8 @@
 // (no requiere un request aparte) — `active_contract` queda en `null`
 // hasta que exista el módulo `contracts` (fuera del scope de #9).
 import type { LandlordPropertySummary } from '@/api/people.api'
-import { EmptyState } from '@/shared/components'
-
-const STATUS_LABELS: Record<string, string> = {
-  available: 'Disponible',
-  occupied: 'Ocupada',
-  maintenance: 'En mantenimiento',
-}
+import { EmptyState, ContractStatusBadge } from '@/shared/components'
+import { propertyTypeLabel } from '@/shared/utils/propertyType'
 
 type Props = { properties: LandlordPropertySummary[] }
 
@@ -33,8 +28,12 @@ export function LandlordPropertiesList({ properties }: Props) {
         {properties.map((property) => (
           <tr key={property.id} className="border-b last:border-0">
             <td className="py-2 pr-4">{property.address}</td>
-            <td className="py-2 pr-4 text-muted-foreground">{property.property_type}</td>
-            <td className="py-2">{STATUS_LABELS[property.status] ?? property.status}</td>
+            <td className="py-2 pr-4 text-muted-foreground">
+              {propertyTypeLabel(property.property_type)}
+            </td>
+            <td className="py-2">
+              <ContractStatusBadge status={property.status} />
+            </td>
           </tr>
         ))}
       </tbody>

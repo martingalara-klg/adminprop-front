@@ -9,6 +9,7 @@ import { Button, Input, Label } from '@/shared/components'
 import type { LandlordSummary } from '@/api/people.api'
 import type { NeighborhoodDetail } from '@/api/neighborhoods.api'
 import type { PropertyDetail } from '@/api/properties.api'
+import { propertyTypeLabel } from '@/shared/utils/propertyType'
 import {
   updatePropertySchema,
   PROPERTY_TYPE_OPTIONS,
@@ -147,7 +148,7 @@ export function PropertyEditForm({
         >
           {PROPERTY_TYPE_OPTIONS.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {propertyTypeLabel(option)}
             </option>
           ))}
         </select>
@@ -185,6 +186,17 @@ export function PropertyEditForm({
         </p>
       ) : null}
 
+      {/* issue #55 (punto 3, CA-55-03): el PO reportó que elegir un barrio
+          en una propiedad legacy (`neighborhood_id: null`) dejaba
+          "Guardar cambios" deshabilitado, con sospecha de que el gate
+          dependía de `formState.isDirty`/`isValid` de RHF junto a
+          `defaultValues.neighborhood_id: ''`. Investigado: el `disabled`
+          de este botón SOLO depende de `isSubmitting`, `isRented` y
+          `hasNeighborhoods` (catálogo no vacío) — ninguno cambia al
+          seleccionar un barrio, y NUNCA se usó `isDirty`/`isValid` acá.
+          No reproduce; ver test de regresión CA-55-03 en
+          properties.spec.tsx que fija el comportamiento correcto
+          (habilitado tras elegir barrio, envío exitoso). */}
       <div>
         <Button type="submit" disabled={isSubmitting || isRented || !hasNeighborhoods}>
           {isSubmitting ? 'Guardando…' : 'Guardar cambios'}
