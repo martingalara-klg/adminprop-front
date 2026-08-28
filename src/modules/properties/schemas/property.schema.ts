@@ -10,8 +10,12 @@
 //   service_type: uno de los 7 valores del enum.
 //   account_number: 1-100 caracteres, obligatorio en cada cuenta.
 import { z } from 'zod'
+import { PROPERTY_TYPE_OPTIONS } from '@/shared/utils/propertyType'
 
-export const PROPERTY_TYPE_OPTIONS = ['departamento', 'casa', 'local', 'cochera', 'otro'] as const
+// Issue #55: catálogo + labels es-AR (incluye `duplex`) viven en
+// src/shared/utils/propertyType.ts — reexportado acá para no romper los
+// imports existentes desde este schema.
+export { PROPERTY_TYPE_OPTIONS }
 
 // RF-04: `rented` es derivado — nunca se ofrece como opción manual.
 export const MANUAL_PROPERTY_STATUS_OPTIONS = ['available', 'unavailable'] as const

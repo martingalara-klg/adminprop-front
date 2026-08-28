@@ -349,7 +349,7 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     })
   })
 
-  it('CA-01-04: una propiedad `rented` muestra el estado automático y no permite editarlo manualmente', async () => {
+  it('CA-01-04: una propiedad `rented` muestra el estado automático de solo lectura, pero el resto de los campos se puede seguir editando (RF-01/RF-02)', async () => {
     setSession(OWNER_SESSION)
     mockFichaDefaults()
     vi.mocked(propertiesApi.get).mockResolvedValueOnce({
@@ -360,7 +360,10 @@ describe('Módulo 1 — Propiedades (#10)', () => {
 
     await waitFor(() => screen.getByTestId('property-status-rented'))
     expect(screen.getByTestId('property-status-rented')).toHaveTextContent(/estado automático/i)
-    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled()
+    // RF-01: "Edición de todos los campos salvo el estado `rented`
+    // (derivado)" — el estado en sí queda de solo lectura (texto, no
+    // select) pero el guardado del resto de los campos sigue permitido.
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeEnabled()
   })
 
   it('CA-01-05: la ficha muestra el contrato vigente con el inquilino, el historial de reparaciones y los conceptos recurrentes activos', async () => {
@@ -563,5 +566,115 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Sin barrio').length).toBeGreaterThan(0)
     })
+  })
+
+  // ── Issue #55 (ronda feedback #2 del PO) ────────────────────────────────
+
+  it('CA-55-03: en una propiedad ALQUILADA y legacy (sin barrio), elegir un barrio habilita "Guardar cambios" y guarda (RF-01/RF-02: solo el estado es de solo lectura)', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    // Escenario exacto de la captura del PO: propiedad `rented` (con
+    // contrato vigente) Y legacy (`neighborhood_id: null`).
+    vi.mocked(propertiesApi.get).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, status: 'rented', neighborhood_id: null, neighborhood: null },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByTestId('property-status-rented'))
+    await user.selectOptions(screen.getByLabelText('Barrio'), 'n-1')
+
+    // RF-01/RF-02: el estado `rented` es de solo lectura (ya se muestra
+    // como texto arriba), pero el resto de los campos se puede editar y
+    // guardar igual — el botón NO debe quedar bloqueado por `isRented`.
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeEnabled()
+
+    vi.mocked(propertiesApi.update).mockResolvedValueOnce({
+      data: {
+        ...PROPERTY_DETAIL,
+        status: 'rented',
+        neighborhood_id: 'n-1',
+        neighborhood: { id: 'n-1', name: 'Nueva Córdoba' },
+      },
+    })
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() => {
+      expect(propertiesApi.update).toHaveBeenCalledWith(
+        'p-1',
+        expect.objectContaining({ neighborhood_id: 'n-1' }),
+      )
+    })
+    // Seguimiento crítico: el backend APLICA el `status` que llega en el
+    // PATCH (no lo ignora) — para una propiedad `rented`, el form NUNCA
+    // debe mandar `status` (rompería `rented ⟺ contrato activo`, RF-04).
+    // El PATCH es parcial: omitir el campo = "no tocar el estado".
+    expect(propertiesApi.update).toHaveBeenCalledWith(
+      'p-1',
+      expect.not.objectContaining({ status: expect.anything() }),
+    )
+  })
+
+  it('CA-55-05: en una propiedad NO alquilada, cambiar el estado manual sí viaja en el PATCH', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.get).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, status: 'available' },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByLabelText('Estado'))
+    await user.selectOptions(screen.getByLabelText('Estado'), 'unavailable')
+
+    vi.mocked(propertiesApi.update).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, status: 'unavailable' },
+    })
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() => {
+      expect(propertiesApi.update).toHaveBeenCalledWith(
+        'p-1',
+        expect.objectContaining({ status: 'unavailable' }),
+      )
+    })
+  })
+
+  it('CA-55-01: el listado muestra el tipo capitalizado y el select de alta incluye Duplex', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(propertiesApi.list).mockResolvedValue({
+      data: [{ ...PROPERTY_SUMMARY, property_type: 'duplex' }],
+      meta: {},
+    })
+
+    renderPropertiesApp('/properties')
+    const user = userEvent.setup()
+
+    // listado: valor `duplex` capitalizado, no crudo.
+    await waitFor(() => screen.getByText('Duplex'))
+
+    // select de alta: incluye la opción Duplex con label capitalizado.
+    await user.click(await screen.findByRole('button', { name: 'Nueva propiedad' }))
+    await waitFor(() => screen.getByLabelText('Tipo'))
+    expect(screen.getByRole('option', { name: 'Duplex' }) as HTMLOptionElement).toHaveValue(
+      'duplex',
+    )
+  })
+
+  it('CA-55-04: la ficha muestra el botón "Ver contrato" que linkea a /contracts/:id', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(contractsApi.list).mockResolvedValueOnce({ data: [ACTIVE_CONTRACT], meta: {} })
+    vi.mocked(peopleApi.getRenter).mockResolvedValueOnce({ data: RENTER_DETAIL })
+
+    renderPropertiesApp('/properties/p-1')
+
+    await waitFor(() => screen.getByTestId('property-active-contract'))
+    const contractLink = screen.getByRole('link', { name: 'Ver contrato' })
+    expect(contractLink).toHaveAttribute('href', '/contracts/c-1')
   })
 })

@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { Button, Input, Label } from '@/shared/components'
 import type { LandlordSummary } from '@/api/people.api'
 import type { NeighborhoodDetail } from '@/api/neighborhoods.api'
+import { propertyTypeLabel } from '@/shared/utils/propertyType'
 import {
   createPropertySchema,
   PROPERTY_TYPE_OPTIONS,
@@ -120,7 +121,10 @@ export function PropertyForm({
         ) : (
           <p className="text-sm text-muted-foreground" data-testid="property-no-neighborhoods">
             Todavía no hay barrios cargados.{' '}
-            <Link to="/properties/neighborhoods" className="font-medium underline-offset-4 hover:underline">
+            <Link
+              to="/properties/neighborhoods"
+              className="font-medium underline-offset-4 hover:underline"
+            >
               Creá un barrio primero
             </Link>
             .
@@ -137,7 +141,7 @@ export function PropertyForm({
         >
           {PROPERTY_TYPE_OPTIONS.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {propertyTypeLabel(option)}
             </option>
           ))}
         </select>

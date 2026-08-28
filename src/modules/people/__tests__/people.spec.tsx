@@ -360,4 +360,40 @@ describe('Módulo 2 — Personas (#9)', () => {
     })
     expect(peopleApi.listRenters).not.toHaveBeenCalled()
   })
+
+  // ── Issue #55 (ronda feedback #2 del PO) — cierra el #29 ────────────────
+
+  it('CA-55-02: la ficha del propietario muestra "Con contrato" (verde) para una propiedad rented y "Sin contrato" (rojo) para el resto', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({
+      data: {
+        ...LANDLORD_DETAIL,
+        properties: [
+          {
+            id: 'p-1',
+            address: 'Av. Colón 1234',
+            property_type: 'departamento',
+            status: 'rented',
+            active_contract: null,
+          },
+          {
+            id: 'p-2',
+            address: 'San Martín 555',
+            property_type: 'duplex',
+            status: 'available',
+            active_contract: null,
+          },
+        ],
+      },
+    })
+
+    renderPeopleApp('/people/landlords/l-1')
+
+    await waitFor(() => screen.getByText('Av. Colón 1234'))
+    expect(screen.getByText('Con contrato')).toBeInTheDocument()
+    expect(screen.getByText('Sin contrato')).toBeInTheDocument()
+    // CA-55-01: labels de tipo capitalizados (incluye `duplex`).
+    expect(screen.getByText('Departamento')).toBeInTheDocument()
+    expect(screen.getByText('Duplex')).toBeInTheDocument()
+  })
 })

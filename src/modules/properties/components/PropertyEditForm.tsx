@@ -8,7 +8,8 @@ import { Link } from 'react-router-dom'
 import { Button, Input, Label } from '@/shared/components'
 import type { LandlordSummary } from '@/api/people.api'
 import type { NeighborhoodDetail } from '@/api/neighborhoods.api'
-import type { PropertyDetail } from '@/api/properties.api'
+import type { PropertyDetail, PropertyUpdate } from '@/api/properties.api'
+import { propertyTypeLabel } from '@/shared/utils/propertyType'
 import {
   updatePropertySchema,
   PROPERTY_TYPE_OPTIONS,
@@ -27,7 +28,7 @@ type Props = {
   neighborhoods: NeighborhoodDetail[]
   errorMessage: string | null
   isSubmitting: boolean
-  onSubmit: (values: UpdatePropertyInput) => void
+  onSubmit: (values: PropertyUpdate) => void
 }
 
 export function PropertyEditForm({
@@ -64,10 +65,27 @@ export function PropertyEditForm({
     },
   })
 
+  // issue #55 (punto 3, seguimiento post-fix): el backend APLICA el
+  // `status` que llega en el PATCH (solo valida available/unavailable) —
+  // no lo ignora. `status` en el form es un placeholder inerte para
+  // propiedades `rented` (ver defaultValues arriba, siempre `available`),
+  // así que jamás debe viajar en el payload cuando `isRented`: enviarlo
+  // rompería el invariante `rented ⟺ contrato activo` (RF-04) sacando la
+  // propiedad de alquilada sin que el contrato haya terminado. El PATCH
+  // es parcial — omitir el campo equivale a "no tocar el estado".
+  function handleFormSubmit(values: UpdatePropertyInput) {
+    if (isRented) {
+      const { address, landlord_id, neighborhood_id, property_type, notes } = values
+      onSubmit({ address, landlord_id, neighborhood_id, property_type, notes })
+      return
+    }
+    onSubmit(values)
+  }
+
   return (
     <form
       className="flex flex-col gap-4 rounded-md border p-4"
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={handleSubmit(handleFormSubmit)}
       noValidate
     >
       <h3 className="text-sm font-medium">Editar propiedad</h3>
@@ -147,7 +165,7 @@ export function PropertyEditForm({
         >
           {PROPERTY_TYPE_OPTIONS.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {propertyTypeLabel(option)}
             </option>
           ))}
         </select>
@@ -185,8 +203,20 @@ export function PropertyEditForm({
         </p>
       ) : null}
 
+      {/* issue #55 (punto 3, CA-55-03) — root cause encontrado: RF-01/RF-02
+          de spec_module_01_propiedades.md dicen "edición de TODOS los
+          campos salvo el estado `rented` (derivado)" — una propiedad
+          alquilada se puede seguir editando (dirección, propietario,
+          barrio, tipo, notas); SOLO el campo `status` queda de solo
+          lectura (ya se muestra como texto arriba, nunca como select).
+          El botón incluía `isRented` en el `disabled`, bloqueando
+          indebidamente el guardado completo de propiedades `rented` —
+          eso es lo que el PO reprodujo al elegir un barrio en una
+          propiedad legacy que además estaba alquilada. Ver test de
+          regresión CA-55-03 en properties.spec.tsx (falla sin el fix,
+          pasa con él). */}
       <div>
-        <Button type="submit" disabled={isSubmitting || isRented || !hasNeighborhoods}>
+        <Button type="submit" disabled={isSubmitting || !hasNeighborhoods}>
           {isSubmitting ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </div>

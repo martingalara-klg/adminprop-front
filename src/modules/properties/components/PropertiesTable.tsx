@@ -4,12 +4,8 @@
 import { Link } from 'react-router-dom'
 import type { PropertySummary } from '@/api/properties.api'
 import type { LandlordSummary } from '@/api/people.api'
-
-const STATUS_LABELS: Record<string, string> = {
-  available: 'Disponible',
-  rented: 'Alquilada',
-  unavailable: 'No disponible',
-}
+import { ContractStatusBadge } from '@/shared/components'
+import { propertyTypeLabel } from '@/shared/utils/propertyType'
 
 type Props = {
   properties: PropertySummary[]
@@ -43,8 +39,12 @@ export function PropertiesTable({ properties, landlords }: Props) {
             <td className="py-2 pr-4 text-muted-foreground">
               {property.neighborhood?.name ?? 'Sin barrio'}
             </td>
-            <td className="py-2 pr-4 text-muted-foreground">{property.property_type}</td>
-            <td className="py-2 pr-4">{STATUS_LABELS[property.status] ?? property.status}</td>
+            <td className="py-2 pr-4 text-muted-foreground">
+              {propertyTypeLabel(property.property_type)}
+            </td>
+            <td className="py-2 pr-4">
+              <ContractStatusBadge status={property.status} />
+            </td>
             <td className="py-2">
               <Link
                 to={`/properties/${property.id}`}
