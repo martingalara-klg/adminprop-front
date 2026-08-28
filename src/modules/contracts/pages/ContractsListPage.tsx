@@ -71,6 +71,27 @@ export function ContractsListPage() {
   function handleCreate(values: CreateContractInput) {
     setCreateError(null)
     setCreateFieldError(null)
+
+    const adjustmentFrequencyMonths =
+      values.currency === 'ARS' && values.adjustment_frequency_months
+        ? Number(values.adjustment_frequency_months)
+        : undefined
+
+    // Issue #57 (espejo de back#107, RN-C06 v2): con frecuencia de
+    // ajuste se envía `historical_amounts[]` (tramos transcurridos);
+    // sin frecuencia sigue el mecanismo de #50
+    // (`current_amount`/`current_amount_since`) — mutuamente
+    // excluyentes, sdd_03 §8.
+    const usesTramos = !!adjustmentFrequencyMonths
+    // Zod ya validó (superRefine) que ningún tramo quede vacío antes de
+    // llegar acá — el `.filter` sólo achica el tipo para el payload
+    // (`historical_amounts` puede tener huecos `undefined` a nivel de
+    // tipo de RHF mientras el usuario todavía está completando el form).
+    const historicalAmounts =
+      values.is_in_progress && usesTramos && values.historical_amounts?.length
+        ? values.historical_amounts.filter((value): value is string => !!value)
+        : undefined
+
     createContract.mutate(
       {
         property_id: values.property_id,
@@ -80,10 +101,7 @@ export function ContractsListPage() {
         start_date: values.start_date,
         end_date: values.end_date,
         daily_late_fee_pct: values.daily_late_fee_pct,
-        adjustment_frequency_months:
-          values.currency === 'ARS' && values.adjustment_frequency_months
-            ? Number(values.adjustment_frequency_months)
-            : undefined,
+        adjustment_frequency_months: adjustmentFrequencyMonths,
         adjustment_index:
           values.currency === 'ARS' && values.adjustment_index
             ? values.adjustment_index
@@ -94,17 +112,20 @@ export function ContractsListPage() {
             : undefined,
         notes: values.notes || undefined,
         // Issue #50 (espejo de back#100, RN-08/RN-C06): sólo se envían
-        // si el toggle "en curso" está activo — `is_in_progress` es
-        // puramente de UI y nunca viaja al backend. La fecha se captura
-        // como mes ("YYYY-MM") y se normaliza a día 1 acá (el back
-        // también normaliza, pero enviarla ya normalizada evita
-        // ambigüedad — sdd_03 §8).
+        // si el toggle "en curso" está activo Y no corresponde el
+        // mecanismo de tramos del #57. La fecha se captura como mes
+        // ("YYYY-MM") y se normaliza a día 1 acá (el back también
+        // normaliza, pero enviarla ya normalizada evita ambigüedad —
+        // sdd_03 §8).
         current_amount:
-          values.is_in_progress && values.current_amount ? values.current_amount : undefined,
+          values.is_in_progress && !usesTramos && values.current_amount
+            ? values.current_amount
+            : undefined,
         current_amount_since:
-          values.is_in_progress && values.current_amount_since
+          values.is_in_progress && !usesTramos && values.current_amount_since
             ? `${values.current_amount_since}-01`
             : undefined,
+        historical_amounts: historicalAmounts,
       },
       {
         onSuccess: () => {

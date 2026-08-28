@@ -918,9 +918,11 @@ export interface paths {
          * Create Contract
          * @description RF-02 + CA-03-01/02/03: crea un contrato -- nace en `draft` (RN-02).
          *     `property_id`/`renter_id` validados contra el mismo tenant (RN-06/RN-D01).
-         *     RN-08/RN-C06 (issue #100): `current_amount`/`current_amount_since` --
-         *     `actor_user_id` (`payload.sub`) es quien queda como `applied_by` del
-         *     ajuste sintetico de carga inicial, si corresponde.
+         *     RN-08/RN-C06 v2 (issue #107): `historical_amounts[]` (con
+         *     `adjustment_frequency_months`) o `current_amount`/`current_amount_since`
+         *     (sin frecuencia, comportamiento del issue #100) -- `actor_user_id`
+         *     (`payload.sub`) es quien queda como `applied_by` del/los ajuste(s)
+         *     sintetico(s) de carga inicial, si corresponde.
          */
         post: operations["create_contract_v1_contracts_post"];
         delete?: never;
@@ -2279,6 +2281,8 @@ export interface components {
             current_amount?: number | string | null;
             /** Current Amount Since */
             current_amount_since?: string | null;
+            /** Historical Amounts */
+            historical_amounts?: (number | string)[] | null;
         };
         /**
          * ContractDetail

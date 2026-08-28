@@ -4,7 +4,7 @@
 // Issue #11 — CA-03-01..08 (lado UI).
 // Issue #50 (espejo de back#100, RN-08/RN-C06) — CA-03-09..15: alta de
 // contrato en curso (monto vigente + desde cuándo rige).
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
@@ -833,6 +833,296 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(screen.getByText('Carga inicial')).toBeInTheDocument()
       expect(screen.getByTestId('initial-load-badge-adj-initial')).toBeInTheDocument()
       expect(screen.queryByText('null%')).not.toBeInTheDocument()
+    })
+  })
+
+  // Issue #57 (espejo de back#107, RN-C06 v2, sdd_03 §8 v1.13) ───────────
+  // Reemplaza el mecanismo del #50 cuando el contrato es ARS con
+  // adjustment_frequency_months: pide un valor por tramo transcurrido
+  // (historical_amounts[]) en vez de un único current_amount/since.
+  describe('UC — alta de contrato en curso por tramos (#57)', () => {
+    beforeEach(() => {
+      // "Hoy" fijo para que los tramos/labels sean deterministas: cae
+      // dentro del tercer tramo (ene 2027 – abr 2027) del ejemplo del
+      // issue #57 (start=may 2026, frecuencia=4 meses).
+      // Sólo `Date` — dejar `setTimeout`/`setInterval` reales evita que
+      // se cuelguen userEvent/waitFor/TanStack Query (retries, debounce)
+      // que dependen de temporizadores reales durante el test.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2027-02-10T12:00:00Z'))
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('CA-03-09: 0 tramos — contrato recién arrancado no pide ni envía historical_amounts', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list)
+        .mockResolvedValueOnce({ data: [], meta: {} })
+        .mockResolvedValueOnce({ data: [DRAFT_CONTRACT_ARS], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({ data: DRAFT_CONTRACT_ARS })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2027-01-15')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '6')
+      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+
+      expect(
+        await screen.findByText(
+          'El contrato recién empezó — no hay tramos anteriores que declarar. Se da de alta como un contrato nuevo normal.',
+        ),
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText(/Valor original/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Monto vigente hoy')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => expect(contractsApi.create).toHaveBeenCalled())
+      const payload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
+      expect(payload?.historical_amounts).toBeUndefined()
+      expect(payload?.current_amount).toBeUndefined()
+      expect(payload?.current_amount_since).toBeUndefined()
+    })
+
+    it('CA-03-09/12: 2 tramos (1 aumento transcurrido) — labels correctos y payload en orden', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list)
+        .mockResolvedValueOnce({ data: [], meta: {} })
+        .mockResolvedValueOnce({ data: [DRAFT_CONTRACT_ARS], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({ data: DRAFT_CONTRACT_ARS })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-09-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
+      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+
+      expect(
+        await screen.findByLabelText('Valor original (sep 2026 – dic 2026)'),
+      ).toBeInTheDocument()
+      expect(screen.getByLabelText('Primer aumento (ene 2027 – hoy)')).toBeInTheDocument()
+      expect(screen.queryByLabelText(/Segundo aumento/)).not.toBeInTheDocument()
+
+      await user.type(screen.getByLabelText('Valor original (sep 2026 – dic 2026)'), '100000')
+      await user.type(screen.getByLabelText('Primer aumento (ene 2027 – hoy)'), '115000')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(contractsApi.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            historical_amounts: ['100000', '115000'],
+          }),
+        )
+      })
+      const payload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
+      expect(payload?.current_amount).toBeUndefined()
+      expect(payload?.current_amount_since).toBeUndefined()
+    })
+
+    it('CA-03-09/12: 3 tramos (2 aumentos transcurridos) — labels del ejemplo del issue', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-05-01')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+
+      expect(
+        await screen.findByLabelText('Valor original (may 2026 – ago 2026)'),
+      ).toBeInTheDocument()
+      expect(screen.getByLabelText('Primer aumento (sep 2026 – dic 2026)')).toBeInTheDocument()
+      expect(screen.getByLabelText('Segundo aumento (ene 2027 – hoy)')).toBeInTheDocument()
+    })
+
+    it('recalcula los tramos en vivo al cambiar start_date o la frecuencia', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2027-01-01')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '6')
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+
+      expect(
+        await screen.findByText(
+          'El contrato recién empezó — no hay tramos anteriores que declarar. Se da de alta como un contrato nuevo normal.',
+        ),
+      ).toBeInTheDocument()
+
+      // Bajar la frecuencia a 1 mes hace que aparezcan tramos vencidos.
+      await user.clear(screen.getByLabelText('Frecuencia de ajuste (meses)'))
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '1')
+
+      expect(
+        await screen.findByLabelText('Valor original (ene 2027 – ene 2027)'),
+      ).toBeInTheDocument()
+    })
+
+    it('valida que TODOS los tramos sean obligatorios y > 0', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-09-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
+      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await screen.findByLabelText('Valor original (sep 2026 – dic 2026)')
+      // Sólo se completa el primer tramo; el segundo queda vacío.
+      await user.type(screen.getByLabelText('Valor original (sep 2026 – dic 2026)'), '100000')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Ingresá el monto de "Primer aumento (ene 2027 – hoy)".'),
+        ).toBeInTheDocument()
+      })
+      expect(contractsApi.create).not.toHaveBeenCalled()
+
+      await user.type(screen.getByLabelText('Primer aumento (ene 2027 – hoy)'), '0')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('El monto de "Primer aumento (ene 2027 – hoy)" debe ser mayor a 0.'),
+        ).toBeInTheDocument()
+      })
+      expect(contractsApi.create).not.toHaveBeenCalled()
+    })
+
+    it('VALIDATION_ERROR de historical_amounts (cantidad incorrecta) del backend se muestra inline', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockRejectedValueOnce(
+        new AdminPropApiError(
+          'VALIDATION_ERROR',
+          400,
+          'El sistema espera 3 valores para los tramos transcurridos.',
+          'historical_amounts',
+        ),
+      )
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-09-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
+      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(
+        await screen.findByLabelText('Valor original (sep 2026 – dic 2026)'),
+        '100000',
+      )
+      await user.type(screen.getByLabelText('Primer aumento (ene 2027 – hoy)'), '115000')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(
+        () => {
+          expect(
+            screen.getAllByText('El sistema espera 3 valores para los tramos transcurridos.')
+              .length,
+          ).toBeGreaterThan(0)
+        },
+        { timeout: 3000 },
+      )
+    })
+
+    it('USD sigue usando el mecanismo único current_amount/since del #50 (nunca tramos)', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({
+        data: { ...DRAFT_CONTRACT_ARS, currency: 'USD' },
+      })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Moneda'), 'USD')
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '1000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-05-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+
+      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      expect(screen.getByLabelText('Monto vigente hoy')).toBeInTheDocument()
+      expect(screen.queryByLabelText(/Valor original/)).not.toBeInTheDocument()
+
+      await user.type(screen.getByLabelText('Monto vigente hoy'), '1200')
+      await user.type(screen.getByLabelText('Desde cuándo rige'), '2027-01')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(contractsApi.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            currency: 'USD',
+            current_amount: '1200',
+            current_amount_since: '2027-01-01',
+          }),
+        )
+      })
+      const payload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
+      expect(payload?.historical_amounts).toBeUndefined()
     })
   })
 

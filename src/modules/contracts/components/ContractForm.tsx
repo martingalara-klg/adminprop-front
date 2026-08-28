@@ -8,6 +8,13 @@
 // está en curso" — despliega `current_amount` (monto vigente hoy) +
 // `current_amount_since` (mes desde el que rige). Aplica a ARS y USD por
 // igual (CA-03-13) — vive fuera del bloque condicional de ajuste ARS.
+//
+// Issue #57 (espejo de back#107, RN-C06 v2): cuando el contrato es ARS
+// y tiene `adjustment_frequency_months`, el toggle "en curso" pasa a
+// pedir un `MoneyInput` POR CADA TRAMO transcurrido (`historical_amounts[]`)
+// en vez del único `current_amount`/`current_amount_since` de #50 — ese
+// mecanismo sigue vigente sólo cuando no hay frecuencia (USD, o ARS sin
+// ajuste periódico).
 import { useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -20,6 +27,7 @@ import {
   ADJUSTMENT_INDEX_LABELS,
   type CreateContractInput,
 } from '../schemas/contract.schema'
+import { computeHistoricalAmountTramos } from '../utils/historicalAmountTramos'
 
 type Props = {
   properties: PropertySummary[]
@@ -47,7 +55,6 @@ export function ContractForm({
     register,
     control,
     handleSubmit,
-    reset,
     watch,
     setError,
     formState: { errors },
@@ -68,13 +75,23 @@ export function ContractForm({
       is_in_progress: false,
       current_amount: '',
       current_amount_since: '',
+      historical_amounts: [],
     },
   })
 
   const currency = watch('currency')
   const adjustmentIndex = watch('adjustment_index')
   const isInProgress = watch('is_in_progress')
+  const startDate = watch('start_date')
+  const adjustmentFrequencyMonths = watch('adjustment_frequency_months')
   const isArs = currency === 'ARS'
+
+  // Issue #57 — RN-C06 v2: sólo ARS con frecuencia usa tramos; el resto
+  // (USD siempre, ARS sin frecuencia) sigue con current_amount/since (#50).
+  const parsedFrequency = Number(adjustmentFrequencyMonths)
+  const usesTramos =
+    isArs && !!adjustmentFrequencyMonths && Number.isInteger(parsedFrequency) && parsedFrequency > 0
+  const tramos = usesTramos ? computeHistoricalAmountTramos(startDate, parsedFrequency) : []
 
   useEffect(() => {
     if (!serverFieldError) return
@@ -87,9 +104,15 @@ export function ContractForm({
   return (
     <form
       className="flex flex-col gap-4 rounded-md border p-4"
+      // Issue #57: NO resetear acá incondicionalmente — `onSubmit` es
+      // fire-and-forget (`mutate`, no `mutateAsync`), así que un reset
+      // inmediato borraba el form ANTES de que el backend responda,
+      // ocultando errores de campo inline (ej: VALIDATION_ERROR de
+      // historical_amounts) en cuanto llegaban. El padre
+      // (ContractsListPage) cierra el modal en `onSuccess`, lo que ya
+      // desmonta/reinicia este form — no hace falta duplicarlo acá.
       onSubmit={handleSubmit((values) => {
         onSubmit(values)
-        reset()
       })}
       noValidate
     >
@@ -217,7 +240,57 @@ export function ContractForm({
           <Label htmlFor="contract-is-in-progress">El contrato ya está en curso</Label>
         </div>
 
-        {isInProgress ? (
+        {isInProgress && usesTramos ? (
+          tramos.length > 0 ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                El sistema completa el historial con estos valores, uno por cada tramo ya
+                transcurrido desde el inicio. El próximo aumento se va a pedir normalmente al
+                cumplirse el siguiente tramo.
+              </p>
+              {tramos.map((tramo) => (
+                <div className="flex flex-col gap-1.5" key={tramo.index}>
+                  <Label htmlFor={`contract-historical-amount-${tramo.index}`}>
+                    {tramo.label}
+                  </Label>
+                  <Controller
+                    control={control}
+                    name={`historical_amounts.${tramo.index}`}
+                    render={({ field }) => (
+                      <MoneyInput
+                        id={`contract-historical-amount-${tramo.index}`}
+                        aria-invalid={!!errors.historical_amounts?.[tramo.index]}
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
+                    )}
+                  />
+                  {errors.historical_amounts?.[tramo.index] ? (
+                    <p className="text-sm text-destructive" role="alert">
+                      {errors.historical_amounts[tramo.index]?.message}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+              {/* Error field-level del backend en el campo raíz (`error.field: "historical_amounts"`,
+                  ej: cantidad de tramos incorrecta, sdd_03 §8) — no ligado a un tramo puntual. */}
+              {typeof (errors.historical_amounts as unknown as { message?: string })?.message ===
+              'string' ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {(errors.historical_amounts as unknown as { message?: string }).message}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              El contrato recién empezó — no hay tramos anteriores que declarar. Se da de alta
+              como un contrato nuevo normal.
+            </p>
+          )
+        ) : null}
+
+        {isInProgress && !usesTramos ? (
           <>
             <p className="text-xs text-muted-foreground">
               El mes actual nace con este monto vigente; el próximo aumento por índice se
