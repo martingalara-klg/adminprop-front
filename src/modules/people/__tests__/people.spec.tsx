@@ -396,4 +396,51 @@ describe('Módulo 2 — Personas (#9)', () => {
     expect(screen.getByText('Departamento')).toBeInTheDocument()
     expect(screen.getByText('Duplex')).toBeInTheDocument()
   })
+
+  // ── Issue #64 (ronda feedback #3 del PO) — tabs + BackLink ──────────────
+
+  it('CA-64-01: las tabs Propietarios/Inquilinos cambian el contenido y la URL de Personas', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValueOnce({ data: [], meta: {} })
+    vi.mocked(peopleApi.listRenters).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPeopleApp('/people')
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole('button', { name: 'Nuevo propietario' })).toBeInTheDocument()
+    expect(peopleApi.listRenters).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('link', { name: 'Inquilinos' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo inquilino' })).toBeInTheDocument()
+    expect(peopleApi.listRenters).toHaveBeenCalled()
+  })
+
+  it('CA-64-02: el BackLink de la ficha del propietario vuelve al listado de Propietarios', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({ data: LANDLORD_DETAIL })
+    vi.mocked(peopleApi.listLandlords).mockResolvedValueOnce({ data: [LANDLORD_SUMMARY], meta: {} })
+
+    renderPeopleApp('/people/landlords/l-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Propietarios' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo propietario' })).toBeInTheDocument()
+    expect(screen.getByText('Juan Pérez')).toBeInTheDocument()
+  })
+
+  it('CA-64-03: el BackLink de la ficha del inquilino vuelve al listado de Inquilinos', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getRenter).mockResolvedValueOnce({ data: RENTER_DETAIL })
+    vi.mocked(peopleApi.getRenterDebt).mockResolvedValueOnce({ data: [] })
+    vi.mocked(peopleApi.listRenters).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPeopleApp('/people/renters/r-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Inquilinos' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo inquilino' })).toBeInTheDocument()
+  })
 })

@@ -1252,4 +1252,21 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(history).not.toHaveTextContent('110.000,00')
     })
   })
+
+  // ── Issue #64 (ronda feedback #3 del PO) — BackLink ─────────────────────
+
+  it('CA-64-07: el BackLink de la ficha del contrato vuelve al listado de Contratos', async () => {
+    setSession(OWNER_SESSION)
+    mockDetailLinkDefaults()
+    vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+    vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+    vi.mocked(contractsApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderContractsApp('/contracts/c-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Contratos' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo contrato' })).toBeInTheDocument()
+  })
 })

@@ -588,4 +588,20 @@ describe('Módulo 5 — Liquidaciones (#14)', () => {
     expect(await screen.findByText(/No tenés permiso para ver liquidaciones/)).toBeInTheDocument()
     expect(settlementsApi.list).not.toHaveBeenCalled()
   })
+
+  // ── Issue #64 (ronda feedback #3 del PO) — BackLink ─────────────────────
+
+  it('CA-64-09: el BackLink de la ficha de la liquidación vuelve al listado de Liquidaciones', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(settlementsApi.get).mockResolvedValue({ data: settlementDetail() })
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORDS)
+    vi.mocked(settlementsApi.list).mockResolvedValueOnce({ data: [] })
+
+    renderSettlementsApp('/settlements/s-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Liquidaciones' }))
+
+    expect(await screen.findByRole('heading', { name: 'Liquidaciones' })).toBeInTheDocument()
+  })
 })
