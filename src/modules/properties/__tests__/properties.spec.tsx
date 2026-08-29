@@ -3,7 +3,7 @@
 // SDD: spec_module_01_propiedades.md RF-01..RF-04 + sdd_03 §7-8 (v1.6).
 // Issue #10 — CA-01-01..06 (lado UI).
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
@@ -306,6 +306,76 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     expect(screen.getByText('5005')).toBeInTheDocument()
     expect(screen.getByText('6006')).toBeInTheDocument()
     expect(screen.getByText('7007')).toBeInTheDocument()
+  })
+
+  it('CA-65: "Agregar cuenta" agrega una fila inline al final de la tabla, Guardar crea la cuenta y Cancelar la quita', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.listServiceAccounts).mockResolvedValue({ data: SERVICE_ACCOUNTS })
+    vi.mocked(propertiesApi.createServiceAccount).mockResolvedValueOnce({
+      data: {
+        id: 'sa-new',
+        property_id: 'p-1',
+        service_type: 'otro',
+        account_number: '9009',
+        secondary_number: null,
+        notes: null,
+        created_at: '2026-08-01T00:00:00Z',
+        updated_at: '2026-08-01T00:00:00Z',
+      },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByText('1001'))
+
+    // Sin fila abierta, no hay form permanente de alta.
+    expect(screen.queryByLabelText('N° de cuenta / cliente')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Agregar cuenta' }))
+    await user.type(screen.getByLabelText('N° de cuenta / cliente'), '9009')
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(propertiesApi.createServiceAccount).toHaveBeenCalledWith(
+      'p-1',
+      expect.objectContaining({ account_number: '9009' }),
+    )
+
+    // La fila vuelve a modo lectura (no queda el form de alta abierto).
+    await waitFor(() => {
+      expect(screen.queryByLabelText('N° de cuenta / cliente')).not.toBeInTheDocument()
+    })
+
+    // Cancelar quita la fila sin crear nada.
+    await user.click(screen.getByRole('button', { name: 'Agregar cuenta' }))
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByLabelText('N° de cuenta / cliente')).not.toBeInTheDocument()
+  })
+
+  it('CA-65: "Eliminar" una cuenta de servicio pide confirmación y solo borra al confirmar', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.listServiceAccounts).mockResolvedValue({ data: SERVICE_ACCOUNTS })
+    vi.mocked(propertiesApi.deleteServiceAccount).mockResolvedValueOnce(undefined)
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByText('1001'))
+
+    const row = screen.getByText('1001').closest('tr')!
+    await user.click(within(row).getByRole('button', { name: 'Eliminar' }))
+
+    // Sin confirmar todavía no dispara el mutate.
+    expect(propertiesApi.deleteServiceAccount).not.toHaveBeenCalled()
+    expect(screen.getByText('¿Eliminar la cuenta de Rentas?')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+    await waitFor(() => {
+      expect(propertiesApi.deleteServiceAccount).toHaveBeenCalledWith('sa-1')
+    })
   })
 
   it('CA-01-03: borrar una propiedad con contrato activo devuelve el mensaje de ENTITY_HAS_DEPENDENCIES', async () => {

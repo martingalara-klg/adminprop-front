@@ -3,6 +3,11 @@
 // RF-01: invitaciones pendientes con reenvío/revocación. Expiración 72h —
 // una invitación vencida se muestra como tal (equivalente al estado
 // `expired` de docs/skills/flow-implementation.md para flujos con token).
+//
+// Issue #65 (auditoría de destructivos): revocar ("Cancelar") disparaba
+// la baja sin pedir confirmación — ahora usa el mismo patrón de 2 pasos
+// que el resto de los borrados/bajas del repo (ConfirmDeleteButton).
+import { ConfirmDeleteButton } from '@/shared/components'
 import type { InvitationSummary } from '@/api/admin.api'
 import { isInvitationExpired } from '../types/admin.types'
 
@@ -43,22 +48,23 @@ export function InvitationsTable({ invitations, isMutating, onResend, onRevoke }
                 </span>
               </td>
               <td className="py-2 text-right">
-                <button
-                  type="button"
-                  className="mr-3 text-sm font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isMutating}
-                  onClick={() => onResend(invitation)}
-                >
-                  Reenviar
-                </button>
-                <button
-                  type="button"
-                  className="text-sm font-medium text-destructive hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isMutating}
-                  onClick={() => onRevoke(invitation)}
-                >
-                  Cancelar
-                </button>
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isMutating}
+                    onClick={() => onResend(invitation)}
+                  >
+                    Reenviar
+                  </button>
+                  <ConfirmDeleteButton
+                    label="Cancelar"
+                    confirmQuestion={`¿Cancelar la invitación a ${invitation.email}?`}
+                    disabled={isMutating}
+                    isSubmitting={isMutating}
+                    onConfirm={() => onRevoke(invitation)}
+                  />
+                </div>
               </td>
             </tr>
           )

@@ -29,8 +29,10 @@ import type { CreateRecurringChargeInput } from '../schemas/property.schema'
 
 import { PropertyEditForm } from '../components/PropertyEditForm'
 import { PropertyReadView } from '../components/PropertyReadView'
-import { ServiceAccountForm } from '../components/ServiceAccountForm'
-import { ServiceAccountsList } from '../components/ServiceAccountsList'
+import {
+  ServiceAccountsList,
+  type ServiceAccountRowError,
+} from '../components/ServiceAccountsList'
 import { PropertyContractSummary } from '../components/PropertyContractSummary'
 import { PropertyWorkOrdersHistory } from '../components/PropertyWorkOrdersHistory'
 import { PropertyRecurringCharges } from '../components/PropertyRecurringCharges'
@@ -79,6 +81,8 @@ export function PropertyDetailPage() {
   const [editSaved, setEditSaved] = useState(false)
   const [isEditingProperty, setIsEditingProperty] = useState(false)
   const [serviceAccountError, setServiceAccountError] = useState<string | null>(null)
+  const [serviceAccountDeleteError, setServiceAccountDeleteError] =
+    useState<ServiceAccountRowError>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [chargeError, setChargeError] = useState<string | null>(null)
   const [isChargeDialogOpen, setIsChargeDialogOpen] = useState(false)
@@ -154,9 +158,10 @@ export function PropertyDetailPage() {
   }
 
   function handleDeleteServiceAccount(serviceAccountId: string) {
-    setServiceAccountError(null)
+    setServiceAccountDeleteError(null)
     deleteServiceAccount.mutate(serviceAccountId, {
-      onError: (error) => setServiceAccountError(resolveErrorMessage(error)),
+      onError: (error) =>
+        setServiceAccountDeleteError({ serviceAccountId, message: resolveErrorMessage(error) }),
     })
   }
 
@@ -214,11 +219,14 @@ export function PropertyDetailPage() {
       ) : null}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Cuentas de servicio</h2>
         <ServiceAccountsList
           accounts={serviceAccounts}
+          canManage={canManageProperties}
+          isCreating={createServiceAccount.isPending}
           isDeleting={deleteServiceAccount.isPending}
           isUpdating={updateServiceAccount.isPending}
+          deleteError={serviceAccountDeleteError}
+          onCreate={handleCreateServiceAccount}
           onUpdate={handleUpdateServiceAccount}
           onDelete={handleDeleteServiceAccount}
         />
@@ -226,13 +234,6 @@ export function PropertyDetailPage() {
           <p className="text-sm text-destructive" role="alert">
             {serviceAccountError}
           </p>
-        ) : null}
-        {canManageProperties ? (
-          <ServiceAccountForm
-            errorMessage={null}
-            isSubmitting={createServiceAccount.isPending}
-            onSubmit={handleCreateServiceAccount}
-          />
         ) : null}
       </section>
 

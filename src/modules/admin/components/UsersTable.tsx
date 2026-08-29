@@ -4,6 +4,11 @@
 // y desactivación. CA-07-02: el único owner activo tiene sus controles
 // deshabilitados con explicación (RN-02/LAST_OWNER_REQUIRED es la
 // invariante de backend; esto es la red de seguridad de UX).
+//
+// Issue #65 (auditoría de destructivos): "Desactivar" disparaba la baja
+// sin pedir confirmación — ahora usa el mismo patrón de 2 pasos que el
+// resto de los borrados/bajas del repo (ConfirmDeleteButton).
+import { ConfirmDeleteButton } from '@/shared/components'
 import type { UserSummary } from '@/api/admin.api'
 
 const ROLE_LABELS: Record<string, string> = {
@@ -72,14 +77,17 @@ export function UsersTable({ users, isMutating, onChangeRole, onDeactivate }: Pr
               </td>
               <td className="py-2 pr-4">{STATUS_LABELS[user.status] ?? user.status}</td>
               <td className="py-2 text-right">
-                <button
-                  type="button"
-                  className="text-sm font-medium text-destructive hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
-                  disabled={isLocked || user.status === 'inactive'}
-                  onClick={() => onDeactivate(user)}
-                >
-                  Desactivar
-                </button>
+                {user.status === 'inactive' ? (
+                  <span className="text-sm text-muted-foreground">Desactivado</span>
+                ) : (
+                  <ConfirmDeleteButton
+                    label="Desactivar"
+                    confirmQuestion={`¿Desactivar a ${user.full_name}? Podrá reactivarse más adelante.`}
+                    disabled={isLocked}
+                    isSubmitting={isMutating}
+                    onConfirm={() => onDeactivate(user)}
+                  />
+                )}
                 {isLastActiveOwner ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     Es el único owner activo: designá otro owner antes de cambiarle el rol o
