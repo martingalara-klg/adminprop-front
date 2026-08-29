@@ -758,9 +758,10 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     expect(contractLink).toHaveAttribute('href', '/contracts/c-1')
   })
 
-  // ── Issue #64 (ronda feedback #3 del PO) — tabs + BackLink ──────────────
+  // ── Issue #64 (ronda feedback #3 del PO) — BackLink; issue #68: el acceso
+  // a Barrios es un botón secundario junto a "Nueva propiedad" ─────────────
 
-  it('CA-64-04: las tabs Propiedades/Barrios cambian el contenido y la URL', async () => {
+  it('CA-68-01: "Barrios" es un botón secundario (outline) junto a "Nueva propiedad" y navega al catálogo', async () => {
     setSession(OWNER_SESSION)
     vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
     vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
@@ -769,9 +770,14 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     renderPropertiesApp('/properties')
     const user = userEvent.setup()
 
-    expect(await screen.findByRole('button', { name: 'Nueva propiedad' })).toBeInTheDocument()
+    const newPropertyButton = await screen.findByRole('button', { name: 'Nueva propiedad' })
+    const neighborhoodsLink = screen.getByRole('link', { name: 'Barrios' })
+    expect(neighborhoodsLink).toHaveAttribute('href', '/properties/neighborhoods')
+    // Ya no es tab: comparten el mismo contenedor a la derecha del título.
+    expect(neighborhoodsLink.parentElement).toBe(newPropertyButton.parentElement)
+    expect(screen.queryByRole('navigation', { name: 'Propiedades' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('link', { name: 'Barrios' }))
+    await user.click(neighborhoodsLink)
 
     expect(await screen.findByRole('button', { name: 'Nuevo barrio' })).toBeInTheDocument()
     expect(screen.getByText('Nueva Córdoba')).toBeInTheDocument()
