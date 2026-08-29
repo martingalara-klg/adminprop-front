@@ -29,6 +29,9 @@ type Props = {
   errorMessage: string | null
   isSubmitting: boolean
   onSubmit: (values: PropertyUpdate) => void
+  // Issue #66: presente cuando el form vive dentro de un EditableSection
+  // — agrega el botón "Cancelar" que descarta y vuelve a modo lectura.
+  onCancel?: () => void
 }
 
 export function PropertyEditForm({
@@ -38,6 +41,7 @@ export function PropertyEditForm({
   errorMessage,
   isSubmitting,
   onSubmit,
+  onCancel,
 }: Props) {
   const isRented = property.status === 'rented'
   // issue #99/#49: propiedades legacy (preexistentes) pueden no tener
@@ -219,10 +223,15 @@ export function PropertyEditForm({
           propiedad legacy que además estaba alquilada. Ver test de
           regresión CA-55-03 en properties.spec.tsx (falla sin el fix,
           pasa con él). */}
-      <div>
+      <div className="flex items-center gap-2">
         <Button type="submit" disabled={isSubmitting || !hasNeighborhoods}>
           {isSubmitting ? 'Guardando…' : 'Guardar cambios'}
         </Button>
+        {onCancel ? (
+          <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCancel}>
+            Cancelar
+          </Button>
+        ) : null}
       </div>
     </form>
   )

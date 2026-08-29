@@ -3,8 +3,9 @@
 // RF-01 detalle + RF-03/RF-04 invitación + RF-05 disable/enable.
 // Issue #7: CA-00-02 (invitación con expiración/reenvío) y CA-00-04
 // (deshabilitar/rehabilitar con confirmación) lado UI.
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Spinner, ErrorState, Button, BackLink } from '@/shared/components'
+import { Spinner, ErrorState, Button, BackLink, EditableSection } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import { useOrganizationDetail } from '../hooks/useOrganizationDetail'
 import { useUpdateOrganization } from '../hooks/useUpdateOrganization'
@@ -13,6 +14,7 @@ import { useEnableOrganization } from '../hooks/useEnableOrganization'
 import { useInvitationPanel } from '../hooks/useInvitationPanel'
 import { OrganizationStatusBadge } from '../components/OrganizationStatusBadge'
 import { OrganizationEditForm } from '../components/OrganizationEditForm'
+import { OrganizationReadView } from '../components/OrganizationReadView'
 import { InviteOwnerPanel } from '../components/InviteOwnerPanel'
 import { OrganizationStatusChangeAction } from '../components/OrganizationStatusChangeAction'
 import type {
@@ -28,6 +30,7 @@ export function OrganizationDetailPage() {
   const disableMutation = useDisableOrganization(organizationId ?? '')
   const enableMutation = useEnableOrganization(organizationId ?? '')
   const invitationPanel = useInvitationPanel(organizationId ?? '')
+  const [isEditing, setIsEditing] = useState(false)
 
   if (isLoading) return <Spinner label="Cargando organización..." />
   if (isError) return <ErrorState message={resolveErrorMessage(error)} />
@@ -36,7 +39,11 @@ export function OrganizationDetailPage() {
   const organization = data.data
 
   function handleUpdate(values: UpdateOrganizationInput) {
-    updateMutation.mutate(values)
+    updateMutation.mutate(values, { onSuccess: () => setIsEditing(false) })
+  }
+
+  function handleCancel() {
+    setIsEditing(false)
   }
 
   function handleDisable(values: OrganizationStatusChangeInput) {
@@ -58,12 +65,20 @@ export function OrganizationDetailPage() {
       <p className="text-sm text-muted-foreground">Slug: {organization.slug}</p>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Datos de la organización</h2>
-        <OrganizationEditForm
-          organization={organization}
-          onSubmit={handleUpdate}
-          isSubmitting={updateMutation.isPending}
-        />
+        <EditableSection
+          title="Datos de la organización"
+          isEditing={isEditing}
+          onEdit={() => setIsEditing(true)}
+          testId="organization-edit-section"
+          view={<OrganizationReadView organization={organization} />}
+        >
+          <OrganizationEditForm
+            organization={organization}
+            onSubmit={handleUpdate}
+            isSubmitting={updateMutation.isPending}
+            onCancel={handleCancel}
+          />
+        </EditableSection>
         {updateMutation.isError ? (
           <p className="text-sm text-destructive" role="alert">
             {resolveErrorMessage(updateMutation.error)}

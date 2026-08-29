@@ -19,6 +19,8 @@ type Props = {
   isSubmitting: boolean
   readOnly?: boolean
   onSubmit: (values: OrganizationSettingsInput) => void
+  // Issue #66: presente cuando el form vive dentro de un EditableSection.
+  onCancel?: () => void
 }
 
 export function OrganizationSettingsForm({
@@ -27,6 +29,7 @@ export function OrganizationSettingsForm({
   isSubmitting,
   readOnly = false,
   onSubmit,
+  onCancel,
 }: Props) {
   const {
     register,
@@ -126,10 +129,15 @@ export function OrganizationSettingsForm({
       ) : null}
 
       {readOnly ? null : (
-        <div>
+        <div className="flex items-center gap-2">
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Guardando…' : 'Guardar cambios'}
           </Button>
+          {onCancel ? (
+            <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCancel}>
+              Cancelar
+            </Button>
+          ) : null}
         </div>
       )}
     </form>

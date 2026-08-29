@@ -15,9 +15,16 @@ type Props = {
   organization: OrganizationDetail
   onSubmit: (values: UpdateOrganizationInput) => void
   isSubmitting?: boolean
+  // Issue #66: presente cuando el form vive dentro de un EditableSection.
+  onCancel?: () => void
 }
 
-export function OrganizationEditForm({ organization, onSubmit, isSubmitting = false }: Props) {
+export function OrganizationEditForm({
+  organization,
+  onSubmit,
+  isSubmitting = false,
+  onCancel,
+}: Props) {
   const {
     register,
     handleSubmit,
@@ -55,10 +62,15 @@ export function OrganizationEditForm({ organization, onSubmit, isSubmitting = fa
         </p>
       ) : null}
 
-      <div>
+      <div className="flex items-center gap-2">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Guardando…' : 'Guardar cambios'}
         </Button>
+        {onCancel ? (
+          <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCancel}>
+            Cancelar
+          </Button>
+        ) : null}
       </div>
     </form>
   )
