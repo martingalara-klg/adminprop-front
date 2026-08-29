@@ -12,11 +12,13 @@ import {
   ForbiddenState,
   ConfirmDeleteButton,
   BackLink,
+  EditableSection,
 } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { UpdateRenterInput } from '../schemas/people.schema'
 
 import { RenterContactForm } from '../components/RenterContactForm'
+import { RenterContactView } from '../components/RenterContactView'
 import { RenterDebtPanel } from '../components/RenterDebtPanel'
 import { useRenterDetail } from '../hooks/useRenterDetail'
 import { useRenterDebt } from '../hooks/useRenterDebt'
@@ -36,6 +38,7 @@ export function RenterDetailPage() {
   const [contactError, setContactError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [contactSaved, setContactSaved] = useState(false)
+  const [isEditingContact, setIsEditingContact] = useState(false)
 
   if (!canReadRenters) {
     return (
@@ -57,10 +60,18 @@ export function RenterDetailPage() {
     updateRenter.mutate(
       { renterId: renter.id, payload: values },
       {
-        onSuccess: () => setContactSaved(true),
+        onSuccess: () => {
+          setContactSaved(true)
+          setIsEditingContact(false)
+        },
         onError: (error) => setContactError(resolveErrorMessage(error)),
       },
     )
+  }
+
+  function handleContactCancel() {
+    setContactError(null)
+    setIsEditingContact(false)
   }
 
   function handleDelete() {
@@ -80,12 +91,21 @@ export function RenterDetailPage() {
       </header>
 
       <section className="flex flex-col gap-2">
-        <RenterContactForm
-          renter={renter}
-          errorMessage={contactError}
-          isSubmitting={updateRenter.isPending}
-          onSubmit={handleContactSubmit}
-        />
+        <EditableSection
+          title="Datos de contacto"
+          isEditing={isEditingContact}
+          onEdit={() => setIsEditingContact(true)}
+          testId="renter-contact-section"
+          view={<RenterContactView renter={renter} />}
+        >
+          <RenterContactForm
+            renter={renter}
+            errorMessage={contactError}
+            isSubmitting={updateRenter.isPending}
+            onSubmit={handleContactSubmit}
+            onCancel={handleContactCancel}
+          />
+        </EditableSection>
         {contactSaved ? (
           <p className="text-sm text-muted-foreground">Datos de contacto actualizados.</p>
         ) : null}

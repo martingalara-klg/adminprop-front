@@ -13,9 +13,17 @@ type Props = {
   errorMessage: string | null
   isSubmitting: boolean
   onSubmit: (values: UpdateRenterInput) => void
+  // Issue #66: presente cuando el form vive dentro de un EditableSection.
+  onCancel?: () => void
 }
 
-export function RenterContactForm({ renter, errorMessage, isSubmitting, onSubmit }: Props) {
+export function RenterContactForm({
+  renter,
+  errorMessage,
+  isSubmitting,
+  onSubmit,
+  onCancel,
+}: Props) {
   const {
     register,
     handleSubmit,
@@ -101,10 +109,15 @@ export function RenterContactForm({ renter, errorMessage, isSubmitting, onSubmit
         </p>
       ) : null}
 
-      <div>
+      <div className="flex items-center gap-2">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Guardando…' : 'Guardar datos de contacto'}
         </Button>
+        {onCancel ? (
+          <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCancel}>
+            Cancelar
+          </Button>
+        ) : null}
       </div>
     </form>
   )

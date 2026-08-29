@@ -12,11 +12,13 @@ import {
   ForbiddenState,
   ConfirmDeleteButton,
   BackLink,
+  EditableSection,
 } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { UpdateLandlordContactInput, UpdateLandlordCommissionInput } from '../schemas/people.schema'
 
 import { LandlordContactForm } from '../components/LandlordContactForm'
+import { LandlordContactView } from '../components/LandlordContactView'
 import { LandlordCommissionField } from '../components/LandlordCommissionField'
 import { LandlordPropertiesList } from '../components/LandlordPropertiesList'
 import { LandlordSettlementsList } from '../components/LandlordSettlementsList'
@@ -45,6 +47,8 @@ export function LandlordDetailPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [contactSaved, setContactSaved] = useState(false)
   const [commissionSaved, setCommissionSaved] = useState(false)
+  const [isEditingContact, setIsEditingContact] = useState(false)
+  const [isEditingCommission, setIsEditingCommission] = useState(false)
 
   if (!canReadLandlords) {
     return (
@@ -66,10 +70,18 @@ export function LandlordDetailPage() {
     updateLandlord.mutate(
       { landlordId: landlord.id, payload: values },
       {
-        onSuccess: () => setContactSaved(true),
+        onSuccess: () => {
+          setContactSaved(true)
+          setIsEditingContact(false)
+        },
         onError: (error) => setContactError(resolveErrorMessage(error)),
       },
     )
+  }
+
+  function handleContactCancel() {
+    setContactError(null)
+    setIsEditingContact(false)
   }
 
   function handleCommissionSubmit(values: UpdateLandlordCommissionInput) {
@@ -78,10 +90,18 @@ export function LandlordDetailPage() {
     updateLandlord.mutate(
       { landlordId: landlord.id, payload: values },
       {
-        onSuccess: () => setCommissionSaved(true),
+        onSuccess: () => {
+          setCommissionSaved(true)
+          setIsEditingCommission(false)
+        },
         onError: (error) => setCommissionError(resolveErrorMessage(error)),
       },
     )
+  }
+
+  function handleCommissionCancel() {
+    setCommissionError(null)
+    setIsEditingCommission(false)
   }
 
   function handleDelete() {
@@ -101,12 +121,21 @@ export function LandlordDetailPage() {
       </header>
 
       <section className="flex flex-col gap-2">
-        <LandlordContactForm
-          landlord={landlord}
-          errorMessage={contactError}
-          isSubmitting={updateLandlord.isPending}
-          onSubmit={handleContactSubmit}
-        />
+        <EditableSection
+          title="Datos de contacto"
+          isEditing={isEditingContact}
+          onEdit={() => setIsEditingContact(true)}
+          testId="landlord-contact-section"
+          view={<LandlordContactView landlord={landlord} />}
+        >
+          <LandlordContactForm
+            landlord={landlord}
+            errorMessage={contactError}
+            isSubmitting={updateLandlord.isPending}
+            onSubmit={handleContactSubmit}
+            onCancel={handleContactCancel}
+          />
+        </EditableSection>
         {contactSaved ? (
           <p className="text-sm text-muted-foreground">Datos de contacto actualizados.</p>
         ) : null}
@@ -117,6 +146,9 @@ export function LandlordDetailPage() {
           commissionPct={landlord.commission_pct}
           errorMessage={commissionError}
           isSubmitting={updateLandlord.isPending}
+          isEditing={isEditingCommission}
+          onEdit={() => setIsEditingCommission(true)}
+          onCancel={handleCommissionCancel}
           onSubmit={handleCommissionSubmit}
         />
         {commissionSaved ? (
