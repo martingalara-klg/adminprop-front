@@ -357,6 +357,10 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     })
 
     renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
 
     await waitFor(() => screen.getByTestId('property-status-rented'))
     expect(screen.getByTestId('property-status-rented')).toHaveTextContent(/estado automático/i)
@@ -582,6 +586,9 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     renderPropertiesApp('/properties/p-1')
     const user = userEvent.setup()
 
+    // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
+
     await waitFor(() => screen.getByTestId('property-status-rented'))
     await user.selectOptions(screen.getByLabelText('Barrio'), 'n-1')
 
@@ -625,6 +632,9 @@ describe('Módulo 1 — Propiedades (#10)', () => {
 
     renderPropertiesApp('/properties/p-1')
     const user = userEvent.setup()
+
+    // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
 
     await waitFor(() => screen.getByLabelText('Estado'))
     await user.selectOptions(screen.getByLabelText('Estado'), 'unavailable')
@@ -709,6 +719,78 @@ describe('Módulo 1 — Propiedades (#10)', () => {
 
     expect(await screen.findByRole('button', { name: 'Nueva propiedad' })).toBeInTheDocument()
     expect(screen.getByText('Av. Colón 1234')).toBeInTheDocument()
+  })
+
+  // ── Issue #66 (ronda feedback #3 del PO) — modo lectura por defecto ────
+
+  it('CA-66-01: la ficha de la propiedad arranca en modo lectura con los datos como texto', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+
+    renderPropertiesApp('/properties/p-1')
+
+    expect(await screen.findByTestId('property-read-view')).toBeInTheDocument()
+    expect(screen.getByTestId('property-read-view')).toHaveTextContent('Av. Colón 1234')
+    expect(screen.queryByLabelText('Dirección')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument()
+  })
+
+  it('CA-66-02: "Editar" habilita los campos y "Guardar cambios" persiste y vuelve a modo lectura', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.update).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, address: 'Av. Colón 2000' },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
+    const addressInput = screen.getByLabelText('Dirección')
+    await user.clear(addressInput)
+    await user.type(addressInput, 'Av. Colón 2000')
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('property-read-view')).toBeInTheDocument()
+    })
+    expect(screen.queryByLabelText('Dirección')).not.toBeInTheDocument()
+    expect(screen.getByText('Propiedad actualizada.')).toBeInTheDocument()
+  })
+
+  it('CA-66-03: "Cancelar" descarta los cambios y vuelve a modo lectura sin guardar', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
+    await user.clear(screen.getByLabelText('Dirección'))
+    await user.type(screen.getByLabelText('Dirección'), 'Dirección descartada')
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.getByTestId('property-read-view')).toBeInTheDocument()
+    expect(screen.getByTestId('property-read-view')).toHaveTextContent('Av. Colón 1234')
+    expect(propertiesApi.update).not.toHaveBeenCalled()
+  })
+
+  it('CA-66-04: sin `property:manage`, la ficha muestra solo lectura sin botón "Editar"', async () => {
+    const READ_ONLY_SESSION = buildSession({
+      userId: 'u-readonly',
+      email: 'readonly@inmobiliaria-sur.com',
+      fullName: 'Solo Lectura',
+      organization: { id: 'org-1', name: 'Inmobiliaria Sur', role: 'admin' },
+      permissions: ['property:read', 'contract:read', 'renter:read'],
+      isSuperAdmin: false,
+    })
+    setSession(READ_ONLY_SESSION)
+    mockFichaDefaults()
+
+    renderPropertiesApp('/properties/p-1')
+
+    expect(await screen.findByTestId('property-read-view')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument()
   })
 
   it('CA-64-06: el BackLink de Barrios vuelve al listado de Propiedades', async () => {
