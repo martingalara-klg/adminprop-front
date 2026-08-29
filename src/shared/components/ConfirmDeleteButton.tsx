@@ -19,6 +19,7 @@ type Props = {
   confirmQuestion: string
   isSubmitting?: boolean
   errorMessage?: string | null
+  disabled?: boolean
   onConfirm: () => void
 }
 
@@ -27,13 +28,19 @@ export function ConfirmDeleteButton({
   confirmQuestion,
   isSubmitting = false,
   errorMessage = null,
+  disabled = false,
   onConfirm,
 }: Props) {
   const [isConfirming, setIsConfirming] = useState(false)
 
   if (!isConfirming) {
     return (
-      <Button type="button" variant="destructive" onClick={() => setIsConfirming(true)}>
+      <Button
+        type="button"
+        variant="destructive"
+        disabled={disabled}
+        onClick={() => setIsConfirming(true)}
+      >
         {label}
       </Button>
     )
