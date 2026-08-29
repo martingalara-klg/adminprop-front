@@ -14,6 +14,7 @@ import {
   ForbiddenState,
   SuccessBanner,
   Button,
+  BackLink,
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -168,6 +169,8 @@ export function WorkOrderDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <BackLink to="/maintenance" label="Mantenimiento" />
+
       <header>
         <h1 className="text-lg font-semibold">{workOrder.property_address}</h1>
         <p className="text-sm text-muted-foreground">{workOrder.title}</p>

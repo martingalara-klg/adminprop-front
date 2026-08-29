@@ -6,7 +6,13 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, ForbiddenState, ConfirmDeleteButton } from '@/shared/components'
+import {
+  Spinner,
+  ErrorState,
+  ForbiddenState,
+  ConfirmDeleteButton,
+  BackLink,
+} from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { UpdateRenterInput } from '../schemas/people.schema'
 
@@ -67,6 +73,8 @@ export function RenterDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <BackLink to="/people/renters" label="Inquilinos" />
+
       <header>
         <h1 className="text-lg font-semibold">{renter.name}</h1>
       </header>
