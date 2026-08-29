@@ -23,6 +23,10 @@ import {
   DialogTitle,
 } from '@/shared/components'
 import type { CreateContractInput } from '../schemas/contract.schema'
+import {
+  computePendingHistoricalAmountTramos,
+  isContractInProgress,
+} from '../utils/historicalAmountTramos'
 
 import { ContractsTable } from '../components/ContractsTable'
 import { ContractForm } from '../components/ContractForm'
@@ -77,19 +81,32 @@ export function ContractsListPage() {
         ? Number(values.adjustment_frequency_months)
         : undefined
 
+    // Issue #69: "en curso" se deriva del mes de inicio (sin checkbox).
+    const isInProgress = isContractInProgress(values.start_date)
+
     // Issue #57 (espejo de back#107, RN-C06 v2): con frecuencia de
     // ajuste se envía `historical_amounts[]` (tramos transcurridos);
     // sin frecuencia sigue el mecanismo de #50
     // (`current_amount`/`current_amount_since`) — mutuamente
     // excluyentes, sdd_03 §8.
     const usesTramos = !!adjustmentFrequencyMonths
-    // Zod ya validó (superRefine) que ningún tramo quede vacío antes de
-    // llegar acá — el `.filter` sólo achica el tipo para el payload
-    // (`historical_amounts` puede tener huecos `undefined` a nivel de
-    // tipo de RHF mientras el usuario todavía está completando el form).
+    // Issue #69: el form sólo pide los tramos a partir del segundo — el
+    // tramo 0 ES `initial_amount` (`historical_amounts[0]` debe coincidir
+    // con `initial_amount`, sdd_03 §8), así que se antepone acá. Con 0
+    // tramos transcurridos NO se envía nada (sdd_03 §8: enviarlo en ese
+    // caso es 400 VALIDATION_ERROR — equivale a un alta normal; los meses
+    // pasados igual se generan cobrados por RN-11/#119 en el backend).
+    // Zod ya validó (superRefine) que ningún tramo pedido quede vacío.
+    const pendingTramos =
+      isInProgress && usesTramos
+        ? computePendingHistoricalAmountTramos(values.start_date, adjustmentFrequencyMonths)
+        : []
     const historicalAmounts =
-      values.is_in_progress && usesTramos && values.historical_amounts?.length
-        ? values.historical_amounts.filter((value): value is string => !!value)
+      pendingTramos.length > 0
+        ? [
+            values.initial_amount,
+            ...pendingTramos.map((tramo) => values.historical_amounts?.[tramo.index] ?? ''),
+          ]
         : undefined
 
     createContract.mutate(
@@ -112,17 +129,15 @@ export function ContractsListPage() {
             : undefined,
         notes: values.notes || undefined,
         // Issue #50 (espejo de back#100, RN-08/RN-C06): sólo se envían
-        // si el toggle "en curso" está activo Y no corresponde el
-        // mecanismo de tramos del #57. La fecha se captura como mes
+        // si el contrato está en curso (issue #69: por fecha) Y no
+        // corresponde el mecanismo de tramos del #57. La fecha se captura como mes
         // ("YYYY-MM") y se normaliza a día 1 acá (el back también
         // normaliza, pero enviarla ya normalizada evita ambigüedad —
         // sdd_03 §8).
         current_amount:
-          values.is_in_progress && !usesTramos && values.current_amount
-            ? values.current_amount
-            : undefined,
+          isInProgress && !usesTramos && values.current_amount ? values.current_amount : undefined,
         current_amount_since:
-          values.is_in_progress && !usesTramos && values.current_amount_since
+          isInProgress && !usesTramos && values.current_amount_since
             ? `${values.current_amount_since}-01`
             : undefined,
         historical_amounts: historicalAmounts,
