@@ -247,7 +247,7 @@ describe('Módulo 2 — Personas (#9)', () => {
 
     // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
     await user.click(await screen.findByTestId('landlord-contact-section-edit-button'))
-    const bankInfoInput = screen.getByLabelText('Datos bancarios')
+    const bankInfoInput = screen.getByLabelText('Datos bancarios (CBU)')
     expect(bankInfoInput).toHaveValue('CBU 0000000000000000000000')
   })
 

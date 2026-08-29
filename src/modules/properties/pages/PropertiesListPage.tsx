@@ -5,6 +5,7 @@
 // rechazaría con 403/404, así que la página ni dispara el request (ver
 // ForbiddenState).
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
 import {
   Spinner,
@@ -23,7 +24,6 @@ import {
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { PropertyCreate, PropertyListFilters } from '@/api/properties.api'
 
-import { PropertiesTabsNav } from '../components/PropertiesTabsNav'
 import { PropertiesTable } from '../components/PropertiesTable'
 import { PropertyForm } from '../components/PropertyForm'
 import { usePropertiesList } from '../hooks/usePropertiesList'
@@ -71,36 +71,42 @@ export function PropertiesListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-lg font-semibold">Propiedades</h1>
-
-      <div className="flex items-center justify-between">
-        <PropertiesTabsNav />
-        {canManageProperties ? (
-          <Dialog
-            open={isCreateOpen}
-            onOpenChange={(open) => {
-              setIsCreateOpen(open)
-              if (open) setCreateError(null)
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button type="button">Nueva propiedad</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Nueva propiedad</DialogTitle>
-              </DialogHeader>
-              <PropertyForm
-                landlords={landlords}
-                neighborhoods={neighborhoods}
-                errorMessage={createError}
-                isSubmitting={createProperty.isPending}
-                onSubmit={handleCreate}
-              />
-            </DialogContent>
-          </Dialog>
-        ) : null}
-      </div>
+      {/* Issue #68: "Barrios" es un acceso secundario (variant outline) a la
+          derecha, junto a la acción principal "Nueva propiedad" — ya no va
+          como tab/link al lado del título. */}
+      <header className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Propiedades</h1>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link to="/properties/neighborhoods">Barrios</Link>
+          </Button>
+          {canManageProperties ? (
+            <Dialog
+              open={isCreateOpen}
+              onOpenChange={(open) => {
+                setIsCreateOpen(open)
+                if (open) setCreateError(null)
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button type="button">Nueva propiedad</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nueva propiedad</DialogTitle>
+                </DialogHeader>
+                <PropertyForm
+                  landlords={landlords}
+                  neighborhoods={neighborhoods}
+                  errorMessage={createError}
+                  isSubmitting={createProperty.isPending}
+                  onSubmit={handleCreate}
+                />
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </div>
+      </header>
 
       {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
 

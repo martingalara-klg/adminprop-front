@@ -19,7 +19,7 @@ export function LandlordContactView({ landlord }: { landlord: LandlordDetail }) 
       <Field label="CUIT/DNI" value={landlord.tax_id ?? ''} />
       <Field label="Teléfono" value={landlord.phone ?? ''} />
       <Field label="Email" value={landlord.email ?? ''} />
-      <Field label="Datos bancarios" value={landlord.bank_info ?? ''} />
+      <Field label="Datos bancarios (CBU)" value={landlord.bank_info ?? ''} />
       <Field label="Notas" value={landlord.notes ?? ''} />
     </div>
   )

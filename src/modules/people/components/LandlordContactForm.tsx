@@ -109,8 +109,8 @@ export function LandlordContactForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="landlord-edit-bank-info">Datos bancarios</Label>
-        <Input id="landlord-edit-bank-info" {...register('bank_info')} />
+        <Label htmlFor="landlord-edit-bank-info">Datos bancarios (CBU)</Label>
+        <Input id="landlord-edit-bank-info" placeholder="CBU / alias" {...register('bank_info')} />
       </div>
 
       <div className="flex flex-col gap-1.5">
