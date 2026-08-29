@@ -4,7 +4,7 @@
 // Issue #7: CA-00-02 (invitación con expiración/reenvío) y CA-00-04
 // (deshabilitar/rehabilitar con confirmación) lado UI.
 import { useParams } from 'react-router-dom'
-import { Spinner, ErrorState, Button } from '@/shared/components'
+import { Spinner, ErrorState, Button, BackLink } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import { useOrganizationDetail } from '../hooks/useOrganizationDetail'
 import { useUpdateOrganization } from '../hooks/useUpdateOrganization'
@@ -49,6 +49,8 @@ export function OrganizationDetailPage() {
 
   return (
     <div className="flex flex-col gap-8 p-6">
+      <BackLink to="/superadmin/organizations" label="Organizaciones" />
+
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-semibold">{organization.name}</h1>
         <OrganizationStatusBadge status={organization.status} />

@@ -14,6 +14,7 @@ import {
   ConfirmDeleteButton,
   SuccessBanner,
   Button,
+  BackLink,
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -161,6 +162,8 @@ export function PropertyDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <BackLink to="/properties" label="Propiedades" />
+
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">{property.address}</h1>

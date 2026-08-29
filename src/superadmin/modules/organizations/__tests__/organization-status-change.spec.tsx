@@ -122,3 +122,19 @@ describe('RF-05 — Deshabilitación / habilitación de organización', () => {
     })
   })
 })
+
+describe('Issue #64 (ronda feedback #3 del PO) — BackLink', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('CA-64-10: el BackLink de la ficha de la organización vuelve al listado de Organizaciones', async () => {
+    vi.mocked(organizationsApi.get).mockResolvedValueOnce({ data: ACTIVE_ORGANIZATION })
+    vi.mocked(organizationsApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderOrganizationsApp('/superadmin/organizations/org-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Organizaciones' }))
+
+    expect(await screen.findByRole('heading', { name: 'Organizaciones' })).toBeInTheDocument()
+  })
+})

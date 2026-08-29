@@ -5,7 +5,6 @@
 // rechazaría con 403/404, así que la página ni dispara el request (ver
 // ForbiddenState).
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
 import {
   Spinner,
@@ -24,6 +23,7 @@ import {
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { PropertyCreate, PropertyListFilters } from '@/api/properties.api'
 
+import { PropertiesTabsNav } from '../components/PropertiesTabsNav'
 import { PropertiesTable } from '../components/PropertiesTable'
 import { PropertyForm } from '../components/PropertyForm'
 import { usePropertiesList } from '../hooks/usePropertiesList'
@@ -71,16 +71,10 @@ export function PropertiesListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold">Propiedades</h1>
-          <Link
-            to="/properties/neighborhoods"
-            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Barrios
-          </Link>
-        </div>
+      <h1 className="text-lg font-semibold">Propiedades</h1>
+
+      <div className="flex items-center justify-between">
+        <PropertiesTabsNav />
         {canManageProperties ? (
           <Dialog
             open={isCreateOpen}
@@ -106,7 +100,7 @@ export function PropertiesListPage() {
             </DialogContent>
           </Dialog>
         ) : null}
-      </header>
+      </div>
 
       {createSuccess ? <SuccessBanner message={createSuccess} /> : null}
 

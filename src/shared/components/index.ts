@@ -7,12 +7,15 @@ export { MoneyInput } from './MoneyInput'
 export type { MoneyInputProps } from './MoneyInput'
 export { SuccessBanner } from './SuccessBanner'
 export { ContractStatusBadge } from './ContractStatusBadge'
+export { BackLink } from './BackLink'
+export type { BackLinkProps } from './BackLink'
 export { Button, buttonVariants } from './ui/button'
 export type { ButtonProps } from './ui/button'
 export { Input } from './ui/input'
 export type { InputProps } from './ui/input'
 export { Label } from './ui/label'
 export type { LabelProps } from './ui/label'
+export { Tabs, TabsLink } from './ui/tabs'
 export {
   Dialog,
   DialogPortal,

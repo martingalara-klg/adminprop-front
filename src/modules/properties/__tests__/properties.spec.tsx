@@ -677,4 +677,51 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     const contractLink = screen.getByRole('link', { name: 'Ver contrato' })
     expect(contractLink).toHaveAttribute('href', '/contracts/c-1')
   })
+
+  // ── Issue #64 (ronda feedback #3 del PO) — tabs + BackLink ──────────────
+
+  it('CA-64-04: las tabs Propiedades/Barrios cambian el contenido y la URL', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(propertiesApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPropertiesApp('/properties')
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole('button', { name: 'Nueva propiedad' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('link', { name: 'Barrios' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo barrio' })).toBeInTheDocument()
+    expect(screen.getByText('Nueva Córdoba')).toBeInTheDocument()
+  })
+
+  it('CA-64-05: el BackLink de la ficha de la propiedad vuelve al listado de Propiedades', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.list).mockResolvedValueOnce({ data: [PROPERTY_SUMMARY], meta: {} })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Propiedades' }))
+
+    expect(await screen.findByRole('button', { name: 'Nueva propiedad' })).toBeInTheDocument()
+    expect(screen.getByText('Av. Colón 1234')).toBeInTheDocument()
+  })
+
+  it('CA-64-06: el BackLink de Barrios vuelve al listado de Propiedades', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(propertiesApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPropertiesApp('/properties/neighborhoods')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Propiedades' }))
+
+    expect(await screen.findByRole('button', { name: 'Nueva propiedad' })).toBeInTheDocument()
+  })
 })

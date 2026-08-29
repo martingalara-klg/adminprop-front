@@ -4,24 +4,20 @@
 // distintos dentro del mismo módulo — navegación simple entre ambos
 // listados (sin lógica de permisos acá; cada página gatea su propio
 // contenido con usePermission).
-import { NavLink } from 'react-router-dom'
-import { cn } from '@/shared/utils/cn'
+//
+// Issue #64 (ronda feedback #3, PO): el selector quedaba a la altura del
+// título ("flotaba" y se perdía). Ahora es el componente compartido
+// `Tabs`/`TabsLink` (src/shared/components/ui/tabs.tsx), ubicado debajo
+// del título "Personas" — ver LandlordsListPage/RentersListPage.
+import { Tabs, TabsLink } from '@/shared/components'
 
 export function PeopleTabsNav() {
-  const linkClass = ({ isActive }: { isActive: boolean }) =>
-    cn(
-      'rounded-md px-3 py-1.5 text-sm font-medium',
-      isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
-    )
-
   return (
-    <nav className="flex gap-2" aria-label="Personas">
-      <NavLink to="/people" end className={linkClass}>
+    <Tabs aria-label="Personas">
+      <TabsLink to="/people" end>
         Propietarios
-      </NavLink>
-      <NavLink to="/people/renters" className={linkClass}>
-        Inquilinos
-      </NavLink>
-    </nav>
+      </TabsLink>
+      <TabsLink to="/people/renters">Inquilinos</TabsLink>
+    </Tabs>
   )
 }

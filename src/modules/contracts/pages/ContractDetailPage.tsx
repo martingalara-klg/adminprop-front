@@ -14,7 +14,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, ForbiddenState } from '@/shared/components'
+import { Spinner, ErrorState, ForbiddenState, BackLink } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import { formatDate, formatMoney } from '@/shared/utils/format'
 import { ADJUSTMENT_INDEX_LABELS, type TerminateContractInput } from '../schemas/contract.schema'
@@ -94,6 +94,8 @@ export function ContractDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <BackLink to="/contracts" label="Contratos" />
+
       <header className="flex items-center gap-3">
         <h1 className="text-lg font-semibold">
           Contrato {CURRENCY_LABELS[contract.currency] ?? contract.currency}
