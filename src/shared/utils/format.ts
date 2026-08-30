@@ -39,3 +39,21 @@ export function formatDate(value: string | null | undefined): string {
   if (Number.isNaN(date.getTime())) return '—'
   return new Intl.DateTimeFormat('es-AR', { timeZone: 'UTC' }).format(date)
 }
+
+/**
+ * Etiqueta es-AR de un período mensual ("YYYY-MM" o "YYYY-MM-DD", día 1
+ * del mes como usa el backend en `period`/`due_period`): "Agosto 2026".
+ * Issue #71: capitalizado y sin la preposición "de" que agrega
+ * `Intl.DateTimeFormat` ("agosto de 2026").
+ */
+export function formatPeriodLabel(period: string | null | undefined): string {
+  const match = /^(\d{4})-(\d{2})/.exec(period ?? '')
+  if (!match) return '—'
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  if (monthIndex < 0 || monthIndex > 11) return '—'
+  const monthName = new Intl.DateTimeFormat('es-AR', { month: 'long', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(year, monthIndex, 1)),
+  )
+  return `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} ${year}`
+}
