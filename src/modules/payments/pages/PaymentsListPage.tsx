@@ -2,11 +2,17 @@
 //
 // RF-02 — CA-04-01/02/03/04/05: panel de cobranzas del mes. Gate por
 // `rent-period:read` (maintenance no lo tiene — RN-A01).
+// Issue #71: el período es navegable a cualquier mes (pasado o futuro);
+// va en el query key de TanStack (`useRentPeriodsList(filters)`), así cada
+// cambio recarga el panel. Un mes sin períodos (contratos cargados
+// retroactivamente, meses futuros) es estado `empty`, nunca error.
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
 import { Spinner, ErrorState, EmptyState, ForbiddenState } from '@/shared/components'
 import type { RentPeriodListFilters } from '@/api/payments.api'
+import { formatPeriodLabel } from '@/shared/utils/format'
+import { currentPeriod } from '@/shared/utils/period'
 
 import { RentPeriodsFilters } from '../components/RentPeriodsFilters'
 import { RentPeriodsTable } from '../components/RentPeriodsTable'
@@ -15,14 +21,23 @@ import { usePropertyOptions } from '../hooks/usePropertyOptions'
 import { useLandlordOptions } from '../hooks/useLandlordOptions'
 import { useRenterOptions } from '../hooks/useRenterOptions'
 
-function currentPeriod(): string {
-  return new Date().toISOString().slice(0, 7)
+type PanelFilters = RentPeriodListFilters & { period: string }
+
+/** Filtros además del período (para el mensaje del estado vacío). */
+function hasExtraFilters(filters: PanelFilters): boolean {
+  return Boolean(
+    filters.status ||
+    filters.in_arrears ||
+    filters.property_id ||
+    filters.landlord_id ||
+    filters.renter_id,
+  )
 }
 
 export function PaymentsListPage() {
   const canReadRentPeriods = usePermission('rent-period:read')
 
-  const [filters, setFilters] = useState<RentPeriodListFilters>({ period: currentPeriod() })
+  const [filters, setFilters] = useState<PanelFilters>({ period: currentPeriod() })
 
   const rentPeriodsQuery = useRentPeriodsList(filters, canReadRentPeriods)
   const propertiesQuery = usePropertyOptions(canReadRentPeriods)
@@ -72,7 +87,14 @@ export function PaymentsListPage() {
         {rentPeriodsQuery.isLoading ? <Spinner label="Cargando alquileres del período..." /> : null}
         {rentPeriodsQuery.isError ? <ErrorState error={rentPeriodsQuery.error} /> : null}
         {rentPeriodsQuery.data && rentPeriodsQuery.data.data.length === 0 ? (
-          <EmptyState title="No hay alquileres para los filtros aplicados" />
+          <EmptyState
+            title={`No hay períodos para ${formatPeriodLabel(filters.period)}`}
+            description={
+              hasExtraFilters(filters)
+                ? 'Probá quitando los filtros de estado, mora, propiedad, propietario o inquilino.'
+                : 'Podés navegar a otro mes con las flechas o eligiendo un período.'
+            }
+          />
         ) : null}
         {rentPeriodsQuery.data && rentPeriodsQuery.data.data.length > 0 ? (
           <RentPeriodsTable
