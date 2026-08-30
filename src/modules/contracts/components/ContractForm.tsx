@@ -4,17 +4,29 @@
 // — el form oculta dinámicamente frecuencia/índice/notas cuando la
 // moneda elegida es USD (no sólo los deshabilita: no se muestran).
 //
-// Issue #50 (espejo de back#100, RN-08/RN-C06): toggle "El contrato ya
-// está en curso" — despliega `current_amount` (monto vigente hoy) +
-// `current_amount_since` (mes desde el que rige). Aplica a ARS y USD por
-// igual (CA-03-13) — vive fuera del bloque condicional de ajuste ARS.
+// Issue #50 (espejo de back#100, RN-08/RN-C06): alta de contrato en curso
+// con `current_amount` (monto vigente hoy) + `current_amount_since` (mes
+// desde el que rige) — mecanismo vigente sólo cuando NO hay frecuencia
+// de ajuste (USD siempre; ARS sin ajuste periódico).
 //
 // Issue #57 (espejo de back#107, RN-C06 v2): cuando el contrato es ARS
-// y tiene `adjustment_frequency_months`, el toggle "en curso" pasa a
-// pedir un `MoneyInput` POR CADA TRAMO transcurrido (`historical_amounts[]`)
-// en vez del único `current_amount`/`current_amount_since` de #50 — ese
-// mecanismo sigue vigente sólo cuando no hay frecuencia (USD, o ARS sin
-// ajuste periódico).
+// y tiene `adjustment_frequency_months`, el alta en curso pide un
+// `MoneyInput` POR CADA TRAMO transcurrido (`historical_amounts[]`).
+//
+// Issue #69 (feedback #3 del PO — ronda 3):
+//   1. El select de propiedades NO permite elegir una propiedad con
+//      contrato activo (`status === 'rented'`): la opción queda
+//      deshabilitada con la leyenda "Con contrato". El back ya rechaza el
+//      solapamiento (409 CONTRACT_OVERLAP) — la UI lo previene.
+//   2. La frecuencia de ajuste (e índice) va ANTES de la sección de
+//      contrato en curso: el cálculo de tramos depende de ella.
+//   3. "En curso" se detecta AUTOMÁTICAMENTE (sin checkbox): mes de
+//      `start_date` anterior al mes actual. Con frecuencia, se piden los
+//      tramos transcurridos a partir del segundo (el "Monto inicial" ES el
+//      tramo 1 — no se vuelve a pedir); sin tramos transcurridos, sólo una
+//      nota informativa. Sin frecuencia cargada (ARS), la sección indica
+//      completarla primero.
+//   4. Labels de tramo: "Valor locativo (mes – mes)" (es-AR).
 import { useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -27,7 +39,11 @@ import {
   ADJUSTMENT_INDEX_LABELS,
   type CreateContractInput,
 } from '../schemas/contract.schema'
-import { computeHistoricalAmountTramos } from '../utils/historicalAmountTramos'
+import {
+  computeHistoricalAmountTramos,
+  formatMonthLong,
+  isContractInProgress,
+} from '../utils/historicalAmountTramos'
 
 type Props = {
   properties: PropertySummary[]
@@ -41,6 +57,24 @@ type Props = {
    * error inline de React Hook Form (error-handling.md §"Field-level").
    */
   serverFieldError?: { field: string; message: string } | null
+}
+
+/** Issue #69: leyenda de la opción deshabilitada para propiedades con contrato activo. */
+export const PROPERTY_RENTED_LEGEND = 'Con contrato'
+
+// Issue #69/#119 (RN-11): al dar de alta un contrato en curso el backend
+// genera automáticamente los períodos de los meses transcurridos como
+// cobrados (`origin: initial_load`) — se le informa al operador.
+const INITIAL_LOAD_NOTE =
+  'Los meses ya transcurridos se registran automáticamente como cobrados; el mes actual nace pendiente.'
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null
+  return (
+    <p className="text-sm text-destructive" role="alert">
+      {message}
+    </p>
+  )
 }
 
 export function ContractForm({
@@ -72,7 +106,6 @@ export function ContractForm({
       adjustment_index: '',
       adjustment_index_notes: '',
       notes: '',
-      is_in_progress: false,
       current_amount: '',
       current_amount_since: '',
       historical_amounts: [],
@@ -81,17 +114,23 @@ export function ContractForm({
 
   const currency = watch('currency')
   const adjustmentIndex = watch('adjustment_index')
-  const isInProgress = watch('is_in_progress')
   const startDate = watch('start_date')
   const adjustmentFrequencyMonths = watch('adjustment_frequency_months')
   const isArs = currency === 'ARS'
+
+  // Issue #69: "en curso" automático — mes de inicio anterior al actual.
+  const isInProgress = isContractInProgress(startDate)
 
   // Issue #57 — RN-C06 v2: sólo ARS con frecuencia usa tramos; el resto
   // (USD siempre, ARS sin frecuencia) sigue con current_amount/since (#50).
   const parsedFrequency = Number(adjustmentFrequencyMonths)
   const usesTramos =
     isArs && !!adjustmentFrequencyMonths && Number.isInteger(parsedFrequency) && parsedFrequency > 0
-  const tramos = usesTramos ? computeHistoricalAmountTramos(startDate, parsedFrequency) : []
+  const allTramos =
+    isInProgress && usesTramos ? computeHistoricalAmountTramos(startDate, parsedFrequency) : []
+  // Issue #69: el tramo 0 es el "Monto inicial" — sólo se piden los siguientes.
+  const initialTramo = allTramos[0]
+  const pendingTramos = allTramos.slice(1)
 
   useEffect(() => {
     if (!serverFieldError) return
@@ -101,16 +140,18 @@ export function ContractForm({
     })
   }, [serverFieldError, setError])
 
+  const historicalRootError = (errors.historical_amounts as unknown as { message?: string })
+    ?.message
+
   return (
     <form
       className="flex flex-col gap-4 rounded-md border p-4"
       // Issue #57: NO resetear acá incondicionalmente — `onSubmit` es
       // fire-and-forget (`mutate`, no `mutateAsync`), así que un reset
       // inmediato borraba el form ANTES de que el backend responda,
-      // ocultando errores de campo inline (ej: VALIDATION_ERROR de
-      // historical_amounts) en cuanto llegaban. El padre
-      // (ContractsListPage) cierra el modal en `onSuccess`, lo que ya
-      // desmonta/reinicia este form — no hace falta duplicarlo acá.
+      // ocultando errores de campo inline. El padre (ContractsListPage)
+      // cierra el modal en `onSuccess`, lo que ya desmonta/reinicia este
+      // form — no hace falta duplicarlo acá.
       onSubmit={handleSubmit((values) => {
         onSubmit(values)
       })}
@@ -127,17 +168,17 @@ export function ContractForm({
           {...register('property_id')}
         >
           <option value="">Seleccioná una propiedad…</option>
-          {properties.map((property) => (
-            <option key={property.id} value={property.id}>
-              {property.address}
-            </option>
-          ))}
+          {properties.map((property) => {
+            // Issue #69: una propiedad con contrato activo no es elegible.
+            const isRented = property.status === 'rented'
+            return (
+              <option key={property.id} value={property.id} disabled={isRented}>
+                {isRented ? `${property.address} — ${PROPERTY_RENTED_LEGEND}` : property.address}
+              </option>
+            )
+          })}
         </select>
-        {errors.property_id ? (
-          <p className="text-sm text-destructive" role="alert">
-            {errors.property_id.message}
-          </p>
-        ) : null}
+        <FieldError message={errors.property_id?.message} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -155,11 +196,7 @@ export function ContractForm({
             </option>
           ))}
         </select>
-        {errors.renter_id ? (
-          <p className="text-sm text-destructive" role="alert">
-            {errors.renter_id.message}
-          </p>
-        ) : null}
+        <FieldError message={errors.renter_id?.message} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -189,11 +226,7 @@ export function ContractForm({
             />
           )}
         />
-        {errors.initial_amount ? (
-          <p className="text-sm text-destructive" role="alert">
-            {errors.initial_amount.message}
-          </p>
-        ) : null}
+        <FieldError message={errors.initial_amount?.message} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -204,11 +237,7 @@ export function ContractForm({
           aria-invalid={!!errors.start_date}
           {...register('start_date')}
         />
-        {errors.start_date ? (
-          <p className="text-sm text-destructive" role="alert">
-            {errors.start_date.message}
-          </p>
-        ) : null}
+        <FieldError message={errors.start_date?.message} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -219,122 +248,7 @@ export function ContractForm({
           aria-invalid={!!errors.end_date}
           {...register('end_date')}
         />
-        {errors.end_date ? (
-          <p className="text-sm text-destructive" role="alert">
-            {errors.end_date.message}
-          </p>
-        ) : null}
-      </div>
-
-      {/* Issue #50 (espejo de back#100, RN-08/RN-C06): alta de contrato
-          en curso — aplica a ARS y USD por igual (CA-03-13), vive fuera
-          del bloque condicional de ajuste ARS. */}
-      <div className="flex flex-col gap-3 rounded-md border border-dashed p-3">
-        <div className="flex items-center gap-2">
-          <input
-            id="contract-is-in-progress"
-            type="checkbox"
-            className="h-4 w-4 rounded border-input"
-            {...register('is_in_progress')}
-          />
-          <Label htmlFor="contract-is-in-progress">El contrato ya está en curso</Label>
-        </div>
-
-        {isInProgress && usesTramos ? (
-          tramos.length > 0 ? (
-            <>
-              <p className="text-xs text-muted-foreground">
-                El sistema completa el historial con estos valores, uno por cada tramo ya
-                transcurrido desde el inicio. El próximo aumento se va a pedir normalmente al
-                cumplirse el siguiente tramo.
-              </p>
-              {tramos.map((tramo) => (
-                <div className="flex flex-col gap-1.5" key={tramo.index}>
-                  <Label htmlFor={`contract-historical-amount-${tramo.index}`}>
-                    {tramo.label}
-                  </Label>
-                  <Controller
-                    control={control}
-                    name={`historical_amounts.${tramo.index}`}
-                    render={({ field }) => (
-                      <MoneyInput
-                        id={`contract-historical-amount-${tramo.index}`}
-                        aria-invalid={!!errors.historical_amounts?.[tramo.index]}
-                        value={field.value ?? ''}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                      />
-                    )}
-                  />
-                  {errors.historical_amounts?.[tramo.index] ? (
-                    <p className="text-sm text-destructive" role="alert">
-                      {errors.historical_amounts[tramo.index]?.message}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-              {/* Error field-level del backend en el campo raíz (`error.field: "historical_amounts"`,
-                  ej: cantidad de tramos incorrecta, sdd_03 §8) — no ligado a un tramo puntual. */}
-              {typeof (errors.historical_amounts as unknown as { message?: string })?.message ===
-              'string' ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {(errors.historical_amounts as unknown as { message?: string }).message}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              El contrato recién empezó — no hay tramos anteriores que declarar. Se da de alta
-              como un contrato nuevo normal.
-            </p>
-          )
-        ) : null}
-
-        {isInProgress && !usesTramos ? (
-          <>
-            <p className="text-xs text-muted-foreground">
-              El mes actual nace con este monto vigente; el próximo aumento por índice se
-              cuenta desde esta fecha, no desde el inicio del contrato.
-            </p>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="contract-current-amount">Monto vigente hoy</Label>
-              <Controller
-                control={control}
-                name="current_amount"
-                render={({ field }) => (
-                  <MoneyInput
-                    id="contract-current-amount"
-                    aria-invalid={!!errors.current_amount}
-                    value={field.value ?? ''}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                  />
-                )}
-              />
-              {errors.current_amount ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {errors.current_amount.message}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="contract-current-amount-since">Desde cuándo rige</Label>
-              <Input
-                id="contract-current-amount-since"
-                type="month"
-                aria-invalid={!!errors.current_amount_since}
-                {...register('current_amount_since')}
-              />
-              {errors.current_amount_since ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {errors.current_amount_since.message}
-                </p>
-              ) : null}
-            </div>
-          </>
-        ) : null}
+        <FieldError message={errors.end_date?.message} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -344,16 +258,17 @@ export function ContractForm({
           aria-invalid={!!errors.daily_late_fee_pct}
           {...register('daily_late_fee_pct')}
         />
-        {errors.daily_late_fee_pct ? (
-          <p className="text-sm text-destructive" role="alert">
-            {errors.daily_late_fee_pct.message}
-          </p>
-        ) : null}
+        <FieldError message={errors.daily_late_fee_pct?.message} />
       </div>
 
-      {/* RN-C — USD no ajusta: sólo ARS ofrece frecuencia/índice de ajuste. */}
+      {/* RN-C — USD no ajusta: sólo ARS ofrece frecuencia/índice de ajuste.
+          Issue #69: va ANTES de la sección "en curso" (los tramos dependen
+          de la frecuencia). */}
       {isArs ? (
-        <div className="flex flex-col gap-3 rounded-md border border-dashed p-3">
+        <div
+          className="flex flex-col gap-3 rounded-md border border-dashed p-3"
+          data-testid="contract-adjustment-section"
+        >
           <p className="text-xs text-muted-foreground">
             Ajuste por índice (informativo — decisión #101: el % siempre se ingresa manualmente).
           </p>
@@ -365,11 +280,7 @@ export function ContractForm({
               aria-invalid={!!errors.adjustment_frequency_months}
               {...register('adjustment_frequency_months')}
             />
-            {errors.adjustment_frequency_months ? (
-              <p className="text-sm text-destructive" role="alert">
-                {errors.adjustment_frequency_months.message}
-              </p>
-            ) : null}
+            <FieldError message={errors.adjustment_frequency_months?.message} />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -387,11 +298,7 @@ export function ContractForm({
                 </option>
               ))}
             </select>
-            {errors.adjustment_index ? (
-              <p className="text-sm text-destructive" role="alert">
-                {errors.adjustment_index.message}
-              </p>
-            ) : null}
+            <FieldError message={errors.adjustment_index?.message} />
           </div>
 
           {adjustmentIndex === 'otro' ? (
@@ -402,11 +309,7 @@ export function ContractForm({
                 aria-invalid={!!errors.adjustment_index_notes}
                 {...register('adjustment_index_notes')}
               />
-              {errors.adjustment_index_notes ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {errors.adjustment_index_notes.message}
-                </p>
-              ) : null}
+              <FieldError message={errors.adjustment_index_notes?.message} />
             </div>
           ) : null}
         </div>
@@ -416,16 +319,117 @@ export function ContractForm({
         </p>
       )}
 
+      {/* Issue #69: sección "Contrato en curso" — sólo aparece cuando el
+          mes de inicio es anterior al actual (detección automática, sin
+          checkbox). Un alta que arranca este mes no la muestra. */}
+      {isInProgress ? (
+        <div
+          className="flex flex-col gap-3 rounded-md border border-dashed p-3"
+          data-testid="contract-in-progress-section"
+        >
+          <p className="text-sm font-medium">
+            Contrato en curso desde {formatMonthLong(startDate)}
+          </p>
+
+          {isArs && !usesTramos ? (
+            <p className="text-xs text-muted-foreground">
+              Completá primero la frecuencia de ajuste para calcular los aumentos transcurridos.
+              Si el contrato no tiene ajuste periódico, podés declarar el monto vigente hoy
+              (opcional).
+            </p>
+          ) : null}
+
+          {usesTramos && pendingTramos.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Sin aumentos transcurridos: el monto inicial sigue vigente. {INITIAL_LOAD_NOTE}
+            </p>
+          ) : null}
+
+          {usesTramos && pendingTramos.length > 0 ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                El monto inicial es el valor locativo del primer tramo ({initialTramo?.range}).
+                Ingresá el valor locativo de cada tramo posterior ya transcurrido; el próximo
+                aumento se va a pedir normalmente al cumplirse el siguiente tramo.{' '}
+                {INITIAL_LOAD_NOTE}
+              </p>
+              {pendingTramos.map((tramo) => (
+                <div className="flex flex-col gap-1.5" key={tramo.index}>
+                  <Label htmlFor={`contract-historical-amount-${tramo.index}`}>
+                    {tramo.label}
+                  </Label>
+                  <Controller
+                    control={control}
+                    name={`historical_amounts.${tramo.index}`}
+                    render={({ field }) => (
+                      <MoneyInput
+                        id={`contract-historical-amount-${tramo.index}`}
+                        aria-invalid={!!errors.historical_amounts?.[tramo.index]}
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
+                    )}
+                  />
+                  <FieldError message={errors.historical_amounts?.[tramo.index]?.message} />
+                </div>
+              ))}
+              {/* Error field-level del backend en el campo raíz (`error.field: "historical_amounts"`,
+                  ej: cantidad de tramos incorrecta, sdd_03 §8) — no ligado a un tramo puntual. */}
+              <FieldError
+                message={typeof historicalRootError === 'string' ? historicalRootError : undefined}
+              />
+            </>
+          ) : null}
+
+          {!usesTramos ? (
+            <>
+              {!isArs ? (
+                <p className="text-xs text-muted-foreground">
+                  Si el monto cambió desde el inicio, declará el monto vigente hoy y desde
+                  cuándo rige (opcional). {INITIAL_LOAD_NOTE}
+                </p>
+              ) : null}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="contract-current-amount">Monto vigente hoy</Label>
+                <Controller
+                  control={control}
+                  name="current_amount"
+                  render={({ field }) => (
+                    <MoneyInput
+                      id="contract-current-amount"
+                      aria-invalid={!!errors.current_amount}
+                      value={field.value ?? ''}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                    />
+                  )}
+                />
+                <FieldError message={errors.current_amount?.message} />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="contract-current-amount-since">Desde cuándo rige</Label>
+                <Input
+                  id="contract-current-amount-since"
+                  type="month"
+                  aria-invalid={!!errors.current_amount_since}
+                  {...register('current_amount_since')}
+                />
+                <FieldError message={errors.current_amount_since?.message} />
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="contract-notes">Notas</Label>
         <Input id="contract-notes" {...register('notes')} />
       </div>
 
-      {errorMessage ? (
-        <p className="text-sm text-destructive" role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
+      <FieldError message={errorMessage ?? undefined} />
 
       <div>
         <Button type="submit" disabled={isSubmitting}>

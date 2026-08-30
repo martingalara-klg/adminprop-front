@@ -5,6 +5,17 @@
 // que se da de alta ya en curso, para pedir un `MoneyInput` por tramo y
 // armar `historical_amounts[]` en el orden que el backend espera.
 //
+// Issue #69 (feedback #3 del PO):
+//   - La detección de "contrato en curso" es AUTOMÁTICA por fecha (sin
+//     checkbox): el mes de `start_date` es anterior al mes actual
+//     (`isContractInProgress`). Ej: hoy 29/08, inicio 01/07 → en curso.
+//   - El "Monto inicial" del form ES el tramo 0 (`historical_amounts[0]`
+//     debe ser igual a `initial_amount`, sdd_03 §8) — el form no lo vuelve
+//     a pedir; sólo pide los tramos a partir del segundo (`index >= 1`).
+//   - Los labels pasan de "Primer aumento / Segundo aumento" a
+//     "Valor locativo (mes – mes)" con el rango de meses que cubre cada
+//     tramo, en es-AR abreviado ("jul 2026 – dic 2026").
+//
 // Misma regla que el backend: tramo `i` = [start_date + i·frecuencia
 // meses, start_date + (i+1)·frecuencia meses). El backend deriva las
 // fechas exactas de cada tramo — este util es SOLO para mostrar labels
@@ -31,24 +42,28 @@ const MONTH_LABELS_ES = [
   'dic',
 ] as const
 
-const ORDINAL_LABELS = [
-  'Valor original',
-  'Primer aumento',
-  'Segundo aumento',
-  'Tercer aumento',
-  'Cuarto aumento',
-  'Quinto aumento',
-  'Sexto aumento',
-  'Séptimo aumento',
-  'Octavo aumento',
-  'Noveno aumento',
-  'Décimo aumento',
+const MONTH_FULL_LABELS_ES = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
 ] as const
 
 export type HistoricalAmountTramo = {
+  /** Posición en `historical_amounts[]` (0 = tramo inicial = `initial_amount`). */
   index: number
-  /** Ej: "Valor original (may 2026 – ago 2026)" / "Segundo aumento (ene 2027 – hoy)" */
+  /** Ej: "Valor locativo (jul 2026 – dic 2026)" */
   label: string
+  /** Sólo el rango, ej: "jul 2026 – dic 2026" (para la nota del tramo inicial). */
+  range: string
 }
 
 function parseIsoDate(iso: string): { y: number; m: number; d: number } {
@@ -87,6 +102,29 @@ function formatMonthLabel(iso: string): string {
   return `${MONTH_LABELS_ES[m - 1]} ${y}`
 }
 
+function isValidIsoDate(iso: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso)
+}
+
+/** "julio 2026" — para la nota informativa de contrato en curso (es-AR). */
+export function formatMonthLong(iso: string): string {
+  if (!isValidIsoDate(iso)) return ''
+  const { y, m } = parseIsoDate(iso)
+  return `${MONTH_FULL_LABELS_ES[m - 1] ?? ''} ${y}`
+}
+
+/**
+ * Issue #69 — regla del PO: el contrato está "en curso" si el MES de
+ * `start_date` es anterior al mes actual (día irrelevante). Un contrato
+ * que arranca este mes o en el futuro es un alta normal.
+ */
+export function isContractInProgress(startDate: string, today: Date = new Date()): boolean {
+  if (!isValidIsoDate(startDate)) return false
+  const startMonth = startDate.slice(0, 7)
+  const todayMonth = today.toISOString().slice(0, 7)
+  return startMonth < todayMonth
+}
+
 /** Cantidad de tramos transcurridos (incluye el tramo vigente que contiene "hoy"). */
 export function computeTramoCount(
   startDate: string,
@@ -102,16 +140,17 @@ export function computeTramoCount(
 }
 
 /**
- * Tramos a pedir en el form. Devuelve `[]` si el contrato recién arrancó
- * (un solo tramo posible) — en ese caso NO corresponde pedir
- * `historical_amounts` (equivale a un alta normal, sdd_03 §8).
+ * Todos los tramos del contrato hasta hoy (incluido el inicial, `index 0`).
+ * Devuelve `[]` si el contrato recién arrancó (un solo tramo posible) — en
+ * ese caso NO corresponde enviar `historical_amounts` (equivale a un alta
+ * normal, sdd_03 §8).
  */
 export function computeHistoricalAmountTramos(
   startDate: string,
   frequencyMonths: number,
   today: Date = new Date(),
 ): HistoricalAmountTramo[] {
-  if (!startDate || !frequencyMonths || frequencyMonths <= 0) return []
+  if (!isValidIsoDate(startDate) || !frequencyMonths || frequencyMonths <= 0) return []
 
   const todayIso = today.toISOString().slice(0, 10)
   if (startDate > todayIso) return []
@@ -122,12 +161,22 @@ export function computeHistoricalAmountTramos(
   const tramos: HistoricalAmountTramo[] = []
   for (let i = 0; i < tramoCount; i++) {
     const tramoStart = addMonthsIso(startDate, i * frequencyMonths)
-    const isCurrent = i === tramoCount - 1
-    const ordinal = ORDINAL_LABELS[i] ?? `Aumento ${i}`
-    const range = isCurrent
-      ? `${formatMonthLabel(tramoStart)} – hoy`
-      : `${formatMonthLabel(tramoStart)} – ${formatMonthLabel(subOneDayIso(addMonthsIso(startDate, (i + 1) * frequencyMonths)))}`
-    tramos.push({ index: i, label: `${ordinal} (${range})` })
+    const tramoEnd = subOneDayIso(addMonthsIso(startDate, (i + 1) * frequencyMonths))
+    const range = `${formatMonthLabel(tramoStart)} – ${formatMonthLabel(tramoEnd)}`
+    tramos.push({ index: i, range, label: `Valor locativo (${range})` })
   }
   return tramos
+}
+
+/**
+ * Issue #69: tramos que el form efectivamente PIDE — todos menos el
+ * inicial, que ya es el "Monto inicial" (`historical_amounts[0] ===
+ * initial_amount`, sdd_03 §8).
+ */
+export function computePendingHistoricalAmountTramos(
+  startDate: string,
+  frequencyMonths: number,
+  today: Date = new Date(),
+): HistoricalAmountTramo[] {
+  return computeHistoricalAmountTramos(startDate, frequencyMonths, today).slice(1)
 }
