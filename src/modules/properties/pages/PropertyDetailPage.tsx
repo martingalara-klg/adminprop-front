@@ -14,20 +14,25 @@ import {
   ConfirmDeleteButton,
   SuccessBanner,
   Button,
+  BackLink,
   Dialog,
   DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,
   ContractStatusBadge,
+  EditableSection,
 } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { PropertyUpdate, PropertyServiceAccountCreate } from '@/api/properties.api'
 import type { CreateRecurringChargeInput } from '../schemas/property.schema'
 
 import { PropertyEditForm } from '../components/PropertyEditForm'
-import { ServiceAccountForm } from '../components/ServiceAccountForm'
-import { ServiceAccountsList } from '../components/ServiceAccountsList'
+import { PropertyReadView } from '../components/PropertyReadView'
+import {
+  ServiceAccountsList,
+  type ServiceAccountRowError,
+} from '../components/ServiceAccountsList'
 import { PropertyContractSummary } from '../components/PropertyContractSummary'
 import { PropertyWorkOrdersHistory } from '../components/PropertyWorkOrdersHistory'
 import { PropertyRecurringCharges } from '../components/PropertyRecurringCharges'
@@ -74,7 +79,10 @@ export function PropertyDetailPage() {
 
   const [editError, setEditError] = useState<string | null>(null)
   const [editSaved, setEditSaved] = useState(false)
+  const [isEditingProperty, setIsEditingProperty] = useState(false)
   const [serviceAccountError, setServiceAccountError] = useState<string | null>(null)
+  const [serviceAccountDeleteError, setServiceAccountDeleteError] =
+    useState<ServiceAccountRowError>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [chargeError, setChargeError] = useState<string | null>(null)
   const [isChargeDialogOpen, setIsChargeDialogOpen] = useState(false)
@@ -106,10 +114,18 @@ export function PropertyDetailPage() {
     updateProperty.mutate(
       { propertyId, payload: values },
       {
-        onSuccess: () => setEditSaved(true),
+        onSuccess: () => {
+          setEditSaved(true)
+          setIsEditingProperty(false)
+        },
         onError: (error) => setEditError(resolveErrorMessage(error)),
       },
     )
+  }
+
+  function handleEditCancel() {
+    setEditError(null)
+    setIsEditingProperty(false)
   }
 
   function handleDelete() {
@@ -142,9 +158,10 @@ export function PropertyDetailPage() {
   }
 
   function handleDeleteServiceAccount(serviceAccountId: string) {
-    setServiceAccountError(null)
+    setServiceAccountDeleteError(null)
     deleteServiceAccount.mutate(serviceAccountId, {
-      onError: (error) => setServiceAccountError(resolveErrorMessage(error)),
+      onError: (error) =>
+        setServiceAccountDeleteError({ serviceAccountId, message: resolveErrorMessage(error) }),
     })
   }
 
@@ -161,6 +178,8 @@ export function PropertyDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <BackLink to="/properties" label="Propiedades" />
+
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">{property.address}</h1>
@@ -173,8 +192,17 @@ export function PropertyDetailPage() {
         </p>
       </header>
 
-      {canManageProperties ? (
-        <section className="flex flex-col gap-2">
+      <EditableSection
+        title="Datos de la propiedad"
+        permission="property:manage"
+        isEditing={isEditingProperty}
+        onEdit={() => setIsEditingProperty(true)}
+        testId="property-edit-section"
+        view={
+          <PropertyReadView property={property} landlords={landlords} neighborhoods={neighborhoods} />
+        }
+      >
+        <div className="flex flex-col gap-2">
           <PropertyEditForm
             property={property}
             landlords={landlords}
@@ -182,19 +210,23 @@ export function PropertyDetailPage() {
             errorMessage={editError}
             isSubmitting={updateProperty.isPending}
             onSubmit={handleEditSubmit}
+            onCancel={handleEditCancel}
           />
-          {editSaved ? (
-            <p className="text-sm text-muted-foreground">Propiedad actualizada.</p>
-          ) : null}
-        </section>
+        </div>
+      </EditableSection>
+      {editSaved ? (
+        <p className="text-sm text-muted-foreground">Propiedad actualizada.</p>
       ) : null}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Cuentas de servicio</h2>
         <ServiceAccountsList
           accounts={serviceAccounts}
+          canManage={canManageProperties}
+          isCreating={createServiceAccount.isPending}
           isDeleting={deleteServiceAccount.isPending}
           isUpdating={updateServiceAccount.isPending}
+          deleteError={serviceAccountDeleteError}
+          onCreate={handleCreateServiceAccount}
           onUpdate={handleUpdateServiceAccount}
           onDelete={handleDeleteServiceAccount}
         />
@@ -202,13 +234,6 @@ export function PropertyDetailPage() {
           <p className="text-sm text-destructive" role="alert">
             {serviceAccountError}
           </p>
-        ) : null}
-        {canManageProperties ? (
-          <ServiceAccountForm
-            errorMessage={null}
-            isSubmitting={createServiceAccount.isPending}
-            onSubmit={handleCreateServiceAccount}
-          />
         ) : null}
       </section>
 

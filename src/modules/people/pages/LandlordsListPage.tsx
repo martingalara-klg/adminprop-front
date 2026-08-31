@@ -60,13 +60,10 @@ export function LandlordsListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Personas</h1>
-        <PeopleTabsNav />
-      </header>
+      <h1 className="text-lg font-semibold">Personas</h1>
 
       <section className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-muted-foreground">Propietarios</h2>
+        <PeopleTabsNav />
         {canManageLandlords ? (
           <Dialog
             open={isCreateOpen}

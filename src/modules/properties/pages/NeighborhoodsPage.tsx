@@ -5,7 +5,6 @@
 // permisos que `/properties`: lectura con `property:read`, alta/edición/
 // baja con `property:manage` — sin permisos nuevos (decisión del PO).
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
 import {
   Spinner,
@@ -13,6 +12,7 @@ import {
   ForbiddenState,
   SuccessBanner,
   Button,
+  BackLink,
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -82,16 +82,10 @@ export function NeighborhoodsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <BackLink to="/properties" label="Propiedades" />
+
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">Barrios</h1>
-          <Link
-            to="/properties"
-            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Volver a propiedades
-          </Link>
-        </div>
+        <h1 className="text-lg font-semibold">Barrios</h1>
         {canManageNeighborhoods ? (
           <Dialog
             open={isCreateOpen}

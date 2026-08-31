@@ -1942,6 +1942,12 @@ export interface components {
          * AdjustmentSummary
          * @description Item de GET /contracts/:id/adjustments, GET /adjustments y
          *     respuesta de POST /adjustments/:id/apply.
+         *
+         *     `applied_by_name`/`pct_effective` (issue #118, sdd_03 v1.14 §8,
+         *     spec_module_03 v1.4 RN-10): campos derivados, no persistidos --
+         *     `ContractAdjustmentService` los resuelve/calcula y construye este
+         *     schema explicitamente (no via `model_validate` directo sobre el ORM
+         *     `ContractAdjustment`, que no tiene ninguno de los dos).
          */
         AdjustmentSummary: {
             /**
@@ -1971,8 +1977,12 @@ export interface components {
             notes: string | null;
             /** Applied By */
             applied_by: string | null;
+            /** Applied By Name */
+            applied_by_name: string | null;
             /** Applied At */
             applied_at: string | null;
+            /** Pct Effective */
+            pct_effective: string | null;
             /**
              * Created At
              * Format: date-time
@@ -3171,6 +3181,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "manual" | "initial_load";
             /** Voided At */
             voided_at: string | null;
             /** Voided By */
@@ -3230,6 +3245,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "manual" | "initial_load";
         };
         /**
          * PaymentVoidRequest

@@ -19,9 +19,17 @@ type Props = {
   errorMessage: string | null
   isSubmitting: boolean
   onSubmit: (values: UpdateLandlordContactInput) => void
+  // Issue #66: presente cuando el form vive dentro de un EditableSection.
+  onCancel?: () => void
 }
 
-export function LandlordContactForm({ landlord, errorMessage, isSubmitting, onSubmit }: Props) {
+export function LandlordContactForm({
+  landlord,
+  errorMessage,
+  isSubmitting,
+  onSubmit,
+  onCancel,
+}: Props) {
   const {
     register,
     handleSubmit,
@@ -101,8 +109,8 @@ export function LandlordContactForm({ landlord, errorMessage, isSubmitting, onSu
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="landlord-edit-bank-info">Datos bancarios</Label>
-        <Input id="landlord-edit-bank-info" {...register('bank_info')} />
+        <Label htmlFor="landlord-edit-bank-info">Datos bancarios (CBU)</Label>
+        <Input id="landlord-edit-bank-info" placeholder="CBU / alias" {...register('bank_info')} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -116,10 +124,15 @@ export function LandlordContactForm({ landlord, errorMessage, isSubmitting, onSu
         </p>
       ) : null}
 
-      <div>
+      <div className="flex items-center gap-2">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Guardando…' : 'Guardar datos de contacto'}
         </Button>
+        {onCancel ? (
+          <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCancel}>
+            Cancelar
+          </Button>
+        ) : null}
       </div>
     </form>
   )

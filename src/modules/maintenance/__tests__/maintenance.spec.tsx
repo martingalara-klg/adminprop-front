@@ -519,3 +519,21 @@ describe('UC-13 — Estados del flujo (idle/loading/error/empty)', () => {
     })
   })
 })
+
+describe('Issue #64 (ronda feedback #3 del PO) — BackLink', () => {
+  it('CA-64-08: el BackLink de la ficha del pedido vuelve al listado de Mantenimiento', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(maintenanceApi.get).mockResolvedValue({ data: makeDetail() })
+    vi.mocked(maintenanceApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+    vi.mocked(propertiesApi.list).mockResolvedValue(PROPERTY_OPTIONS)
+
+    renderMaintenanceApp('/maintenance/wo-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Mantenimiento' }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/no hay pedidos de reparación/i)).toBeInTheDocument()
+    })
+  })
+})

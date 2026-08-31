@@ -71,41 +71,41 @@ export function PropertiesListPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Issue #68: "Barrios" es un acceso secundario (variant outline) a la
+          derecha, junto a la acción principal "Nueva propiedad" — ya no va
+          como tab/link al lado del título. */}
       <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold">Propiedades</h1>
-          <Link
-            to="/properties/neighborhoods"
-            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Barrios
-          </Link>
+        <h1 className="text-lg font-semibold">Propiedades</h1>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link to="/properties/neighborhoods">Barrios</Link>
+          </Button>
+          {canManageProperties ? (
+            <Dialog
+              open={isCreateOpen}
+              onOpenChange={(open) => {
+                setIsCreateOpen(open)
+                if (open) setCreateError(null)
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button type="button">Nueva propiedad</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nueva propiedad</DialogTitle>
+                </DialogHeader>
+                <PropertyForm
+                  landlords={landlords}
+                  neighborhoods={neighborhoods}
+                  errorMessage={createError}
+                  isSubmitting={createProperty.isPending}
+                  onSubmit={handleCreate}
+                />
+              </DialogContent>
+            </Dialog>
+          ) : null}
         </div>
-        {canManageProperties ? (
-          <Dialog
-            open={isCreateOpen}
-            onOpenChange={(open) => {
-              setIsCreateOpen(open)
-              if (open) setCreateError(null)
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button type="button">Nueva propiedad</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Nueva propiedad</DialogTitle>
-              </DialogHeader>
-              <PropertyForm
-                landlords={landlords}
-                neighborhoods={neighborhoods}
-                errorMessage={createError}
-                isSubmitting={createProperty.isPending}
-                onSubmit={handleCreate}
-              />
-            </DialogContent>
-          </Dialog>
-        ) : null}
       </header>
 
       {createSuccess ? <SuccessBanner message={createSuccess} /> : null}

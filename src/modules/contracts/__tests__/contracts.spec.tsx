@@ -4,6 +4,10 @@
 // Issue #11 — CA-03-01..08 (lado UI).
 // Issue #50 (espejo de back#100, RN-08/RN-C06) — CA-03-09..15: alta de
 // contrato en curso (monto vigente + desde cuándo rige).
+// Issue #57 (espejo de back#107, RN-C06 v2) — tramos (historical_amounts[]).
+// Issue #69 (feedback #3 del PO) — CA-69-01..06: propiedades rented no
+// elegibles, frecuencia antes de "en curso", detección automática por
+// mes de inicio, labels "Valor locativo (mes – mes)".
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -110,6 +114,16 @@ const PROPERTIES = {
       status: 'available',
       created_at: '2026-08-01T00:00:00Z',
     },
+    // Issue #69: propiedad con contrato activo — no elegible en el alta.
+    {
+      id: 'p-2',
+      address: 'Bv. San Juan 500',
+      landlord_id: 'l-1',
+      neighborhood_id: null,
+      property_type: 'departamento',
+      status: 'rented',
+      created_at: '2026-08-01T00:00:00Z',
+    },
   ],
   meta: {},
 }
@@ -168,6 +182,11 @@ const DRAFT_CONTRACT_ARS = {
 
 const ACTIVE_CONTRACT = { ...DRAFT_CONTRACT_ARS, id: 'c-2', status: 'active' }
 
+// Issue #69: "en curso" se detecta por mes de inicio anterior al actual,
+// así que los tests de alta NORMAL usan el primer día del mes corriente.
+const CURRENT_MONTH_START = `${new Date().toISOString().slice(0, 7)}-01`
+const NEXT_YEAR_END = `${new Date().getFullYear() + 1}-12-31`
+
 function mockOptionDefaults() {
   vi.mocked(propertiesApi.list).mockResolvedValue(PROPERTIES)
   vi.mocked(peopleApi.listRenters).mockResolvedValue(RENTERS)
@@ -207,8 +226,10 @@ describe('Módulo 3 — Contratos (#11)', () => {
     await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
     await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
     await user.type(screen.getByLabelText('Monto inicial'), '100000')
-    await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
-    await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
+    // Issue #69: un inicio en el mes actual es un alta normal (sin
+    // sección "en curso") — fechas dinámicas para que el test no envejezca.
+    await user.type(screen.getByLabelText('Fecha de inicio'), CURRENT_MONTH_START)
+    await user.type(screen.getByLabelText('Fecha de fin'), NEXT_YEAR_END)
     await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
     await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '6')
     await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
@@ -274,8 +295,8 @@ describe('Módulo 3 — Contratos (#11)', () => {
     await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
     await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
     await user.type(screen.getByLabelText('Monto inicial'), '100000')
-    await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
-    await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
+    await user.type(screen.getByLabelText('Fecha de inicio'), CURRENT_MONTH_START)
+    await user.type(screen.getByLabelText('Fecha de fin'), NEXT_YEAR_END)
     await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
     await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
 
@@ -366,7 +387,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -397,7 +420,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -416,7 +441,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
         new_amount: '110000.00',
         notes: null,
         applied_by: 'owner@inmobiliaria-sur.com',
+        applied_by_name: 'Owner Uno',
         applied_at: '2026-07-02T00:00:00Z',
+        pct_effective: '10.00',
         created_at: '2026-07-01T00:00:00Z',
         updated_at: '2026-07-02T00:00:00Z',
       },
@@ -451,7 +478,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -495,7 +524,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -548,7 +579,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -578,8 +611,31 @@ describe('Módulo 3 — Contratos (#11)', () => {
   })
 
   // Issue #50 (espejo de back#100, RN-08/RN-C06) ────────────────────────
+  // Issue #69: ya no hay checkbox — la sección "en curso" aparece sola
+  // cuando el mes de inicio es anterior al actual. Sin frecuencia (ARS
+  // sin ajuste / USD) el mecanismo current_amount/since del #50 sigue
+  // vigente, ahora OPCIONAL pero sólo válido con ambos campos.
   describe('UC — alta de contrato en curso', () => {
-    it('CA-03-09/13: el toggle "en curso" despliega monto vigente + desde cuándo rige', async () => {
+    // Helper: completa los campos base con un inicio en un mes ya pasado
+    // (ene 2026 — siempre anterior al mes actual) y sin frecuencia.
+    async function fillBaseInProgressContract(
+      user: ReturnType<typeof userEvent.setup>,
+      opts: { currency?: 'ARS' | 'USD'; startDate?: string; endDate?: string } = {},
+    ) {
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      if (opts.currency) {
+        await user.selectOptions(screen.getByLabelText('Moneda'), opts.currency)
+      }
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), opts.startDate ?? '2026-01-01')
+      await user.type(screen.getByLabelText('Fecha de fin'), opts.endDate ?? '2026-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+    }
+
+    it('CA-03-09/13: un inicio en un mes pasado despliega solo la sección "en curso" con monto vigente + desde cuándo rige', async () => {
       setSession(OWNER_SESSION)
       mockOptionDefaults()
       vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
@@ -590,17 +646,20 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await openCreateContractModal(user)
       await screen.findByRole('option', { name: 'Av. Colón 1234' })
 
+      // Issue #69: no existe más el checkbox.
+      expect(screen.queryByLabelText('El contrato ya está en curso')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('contract-in-progress-section')).not.toBeInTheDocument()
       expect(screen.queryByLabelText('Monto vigente hoy')).not.toBeInTheDocument()
-      expect(screen.queryByLabelText('Desde cuándo rige')).not.toBeInTheDocument()
 
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
 
+      expect(await screen.findByTestId('contract-in-progress-section')).toBeInTheDocument()
+      expect(screen.getByText('Contrato en curso desde enero 2026')).toBeInTheDocument()
       expect(screen.getByLabelText('Monto vigente hoy')).toBeInTheDocument()
       expect(screen.getByLabelText('Desde cuándo rige')).toBeInTheDocument()
+      // ARS sin frecuencia: la sección pide completar la frecuencia primero.
       expect(
-        screen.getByText(
-          'El mes actual nace con este monto vigente; el próximo aumento por índice se cuenta desde esta fecha, no desde el inicio del contrato.',
-        ),
+        screen.getByText(/Completá primero la frecuencia de ajuste para calcular los aumentos/),
       ).toBeInTheDocument()
     })
 
@@ -615,16 +674,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillBaseInProgressContract(user)
       await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
       await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-03')
 
@@ -651,17 +701,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Moneda'), 'USD')
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '1000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillBaseInProgressContract(user, { currency: 'USD' })
       await user.type(screen.getByLabelText('Monto vigente hoy'), '1200')
       await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-03')
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
@@ -677,6 +717,26 @@ describe('Módulo 3 — Contratos (#11)', () => {
       })
     })
 
+    it('Issue #69: sin frecuencia, el monto vigente es opcional — dejarlo vacío da de alta sin declarar nada', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({ data: DRAFT_CONTRACT_ARS })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await fillBaseInProgressContract(user)
+      expect(screen.getByLabelText('Monto vigente hoy')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => expect(contractsApi.create).toHaveBeenCalled())
+      const payload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
+      expect(payload?.current_amount).toBeUndefined()
+      expect(payload?.current_amount_since).toBeUndefined()
+      expect(payload?.historical_amounts).toBeUndefined()
+    })
+
     it('CA-03-15: enviar sólo uno de los dos campos muestra el error inline y no dispara el submit', async () => {
       setSession(OWNER_SESSION)
       mockOptionDefaults()
@@ -685,16 +745,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillBaseInProgressContract(user)
       await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
       // "Desde cuándo rige" queda vacío a propósito.
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
@@ -715,16 +766,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-06-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillBaseInProgressContract(user, { startDate: '2026-06-01' })
       await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
       await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-01')
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
@@ -745,16 +787,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2030-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillBaseInProgressContract(user, { endDate: '2030-12-31' })
       await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
       const futureMonth = `${new Date().getFullYear() + 5}-01`
       await user.type(screen.getByLabelText('Desde cuándo rige'), futureMonth)
@@ -782,16 +815,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2026-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillBaseInProgressContract(user)
       await user.type(screen.getByLabelText('Monto vigente hoy'), '130000')
       await user.type(screen.getByLabelText('Desde cuándo rige'), '2026-03')
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
@@ -819,7 +843,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
             new_amount: '130000.00',
             notes: 'Carga inicial: alta de contrato en curso',
             applied_by: 'owner@inmobiliaria-sur.com',
+            applied_by_name: 'Owner Uno',
             applied_at: '2026-01-01T00:00:00Z',
+            pct_effective: '30.00',
             created_at: '2026-01-01T00:00:00Z',
             updated_at: '2026-01-01T00:00:00Z',
           },
@@ -834,12 +860,91 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(screen.getByTestId('initial-load-badge-adj-initial')).toBeInTheDocument()
       expect(screen.queryByText('null%')).not.toBeInTheDocument()
     })
+
+    // Issue #70 punto 2 (espejo de back#118, decisión #127) ──────────────
+    it('CA-70-04: el historial muestra applied_by_name y pct_effective en filas normales', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({
+        data: [
+          {
+            id: 'adj-manual',
+            contract_id: 'c-1',
+            due_period: '2026-07-01',
+            status: 'applied',
+            pct_applied: '12.50',
+            previous_amount: '100000.00',
+            new_amount: '112500.00',
+            notes: null,
+            applied_by: '5f0c8f3a-1111-2222-3333-444455556666',
+            applied_by_name: 'Owner Uno',
+            applied_at: '2026-07-02T00:00:00Z',
+            pct_effective: '12.50',
+            created_at: '2026-07-01T00:00:00Z',
+            updated_at: '2026-07-02T00:00:00Z',
+          },
+        ],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts/c-1')
+
+      const table = await screen.findByTestId('contract-adjustments-history')
+      // "Aplicado por" = nombre resuelto por el backend, nunca el UUID.
+      expect(table).toHaveTextContent('Owner Uno')
+      expect(table).not.toHaveTextContent('5f0c8f3a-1111-2222-3333-444455556666')
+      // % = pct_effective formateado es-AR.
+      expect(table).toHaveTextContent('12,5%')
+    })
+
+    it('CA-70-05: la fila de "Carga inicial" muestra el % (pct_effective) además de la etiqueta', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({
+        data: [
+          {
+            id: 'adj-initial',
+            contract_id: 'c-1',
+            due_period: '2026-03-01',
+            status: 'applied',
+            pct_applied: null,
+            previous_amount: '100000.00',
+            new_amount: '130000.00',
+            notes: 'Carga inicial: alta de contrato en curso',
+            applied_by: 'a0b1c2d3-9999-8888-7777-666655554444',
+            applied_by_name: 'Owner Uno',
+            applied_at: '2026-01-01T00:00:00Z',
+            pct_effective: '30.00',
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts/c-1')
+
+      const table = await screen.findByTestId('contract-adjustments-history')
+      // La etiqueta se mantiene como marca de origen…
+      expect(screen.getByTestId('initial-load-badge-adj-initial')).toHaveTextContent(
+        'Carga inicial',
+      )
+      // …y ahora convive con el % efectivo calculado por el backend.
+      expect(table).toHaveTextContent('30%')
+      expect(table).toHaveTextContent('Owner Uno')
+      expect(table).not.toHaveTextContent('a0b1c2d3-9999-8888-7777-666655554444')
+    })
   })
 
   // Issue #57 (espejo de back#107, RN-C06 v2, sdd_03 §8 v1.13) ───────────
   // Reemplaza el mecanismo del #50 cuando el contrato es ARS con
   // adjustment_frequency_months: pide un valor por tramo transcurrido
   // (historical_amounts[]) en vez de un único current_amount/since.
+  // Issue #69: sin checkbox (detección por mes de inicio), el "Monto
+  // inicial" es el tramo 1 (no se vuelve a pedir) y los labels son
+  // "Valor locativo (mes – mes)".
   describe('UC — alta de contrato en curso por tramos (#57)', () => {
     beforeEach(() => {
       // "Hoy" fijo para que los tramos/labels sean deterministas: cae
@@ -856,7 +961,23 @@ describe('Módulo 3 — Contratos (#11)', () => {
       vi.useRealTimers()
     })
 
-    it('CA-03-09: 0 tramos — contrato recién arrancado no pide ni envía historical_amounts', async () => {
+    async function fillArsContract(
+      user: ReturnType<typeof userEvent.setup>,
+      opts: { startDate: string; frequency: string; endDate?: string },
+    ) {
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), opts.startDate)
+      await user.type(screen.getByLabelText('Fecha de fin'), opts.endDate ?? '2027-12-31')
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), opts.frequency)
+      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
+    }
+
+    it('CA-03-09: 0 tramos — inicio el mes pasado sin aumentos: nota informativa y no envía historical_amounts', async () => {
       setSession(OWNER_SESSION)
       mockOptionDefaults()
       vi.mocked(contractsApi.list)
@@ -867,25 +988,13 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2027-01-15')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '6')
-      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
+      await fillArsContract(user, { startDate: '2027-01-15', frequency: '6' })
 
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
-
+      expect(await screen.findByText('Contrato en curso desde enero 2027')).toBeInTheDocument()
       expect(
-        await screen.findByText(
-          'El contrato recién empezó — no hay tramos anteriores que declarar. Se da de alta como un contrato nuevo normal.',
-        ),
+        screen.getByText(/Sin aumentos transcurridos: el monto inicial sigue vigente/),
       ).toBeInTheDocument()
-      expect(screen.queryByLabelText(/Valor original/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/Valor locativo/)).not.toBeInTheDocument()
       expect(screen.queryByLabelText('Monto vigente hoy')).not.toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
@@ -897,7 +1006,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(payload?.current_amount_since).toBeUndefined()
     })
 
-    it('CA-03-09/12: 2 tramos (1 aumento transcurrido) — labels correctos y payload en orden', async () => {
+    it('CA-03-09/12: 2 tramos (1 aumento transcurrido) — pide sólo el segundo tramo y antepone el monto inicial en el payload', async () => {
       setSession(OWNER_SESSION)
       mockOptionDefaults()
       vi.mocked(contractsApi.list)
@@ -908,32 +1017,28 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-09-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
-      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillArsContract(user, { startDate: '2026-09-01', frequency: '4' })
 
       expect(
-        await screen.findByLabelText('Valor original (sep 2026 – dic 2026)'),
+        await screen.findByLabelText('Valor locativo (ene 2027 – abr 2027)'),
       ).toBeInTheDocument()
-      expect(screen.getByLabelText('Primer aumento (ene 2027 – hoy)')).toBeInTheDocument()
-      expect(screen.queryByLabelText(/Segundo aumento/)).not.toBeInTheDocument()
+      // Issue #69: el tramo inicial NO se vuelve a pedir — es el "Monto inicial".
+      expect(screen.queryByLabelText(/Valor original/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/aumento/i)).not.toBeInTheDocument()
+      expect(screen.getAllByLabelText(/Valor locativo/)).toHaveLength(1)
+      expect(
+        screen.getByText(
+          /El monto inicial es el valor locativo del primer tramo \(sep 2026 – dic 2026\)/,
+        ),
+      ).toBeInTheDocument()
 
-      await user.type(screen.getByLabelText('Valor original (sep 2026 – dic 2026)'), '100000')
-      await user.type(screen.getByLabelText('Primer aumento (ene 2027 – hoy)'), '115000')
+      await user.type(screen.getByLabelText('Valor locativo (ene 2027 – abr 2027)'), '115000')
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
 
       await waitFor(() => {
         expect(contractsApi.create).toHaveBeenCalledWith(
           expect.objectContaining({
+            initial_amount: '100000',
             historical_amounts: ['100000', '115000'],
           }),
         )
@@ -943,7 +1048,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(payload?.current_amount_since).toBeUndefined()
     })
 
-    it('CA-03-09/12: 3 tramos (2 aumentos transcurridos) — labels del ejemplo del issue', async () => {
+    it('CA-03-09/12: 3 tramos (2 aumentos transcurridos) — labels "Valor locativo (mes – mes)" del ejemplo del issue', async () => {
       setSession(OWNER_SESSION)
       mockOptionDefaults()
       vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
@@ -956,13 +1061,12 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await user.type(screen.getByLabelText('Fecha de inicio'), '2026-05-01')
       await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
 
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
-
       expect(
-        await screen.findByLabelText('Valor original (may 2026 – ago 2026)'),
+        await screen.findByLabelText('Valor locativo (sep 2026 – dic 2026)'),
       ).toBeInTheDocument()
-      expect(screen.getByLabelText('Primer aumento (sep 2026 – dic 2026)')).toBeInTheDocument()
-      expect(screen.getByLabelText('Segundo aumento (ene 2027 – hoy)')).toBeInTheDocument()
+      expect(screen.getByLabelText('Valor locativo (ene 2027 – abr 2027)')).toBeInTheDocument()
+      expect(screen.getAllByLabelText(/Valor locativo/)).toHaveLength(2)
+      expect(screen.getByText(/primer tramo \(may 2026 – ago 2026\)/)).toBeInTheDocument()
     })
 
     it('recalcula los tramos en vivo al cambiar start_date o la frecuencia', async () => {
@@ -977,20 +1081,17 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await screen.findByRole('option', { name: 'Av. Colón 1234' })
       await user.type(screen.getByLabelText('Fecha de inicio'), '2027-01-01')
       await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '6')
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
 
       expect(
-        await screen.findByText(
-          'El contrato recién empezó — no hay tramos anteriores que declarar. Se da de alta como un contrato nuevo normal.',
-        ),
+        await screen.findByText(/Sin aumentos transcurridos: el monto inicial sigue vigente/),
       ).toBeInTheDocument()
 
-      // Bajar la frecuencia a 1 mes hace que aparezcan tramos vencidos.
+      // Bajar la frecuencia a 1 mes hace que aparezca un tramo vencido.
       await user.clear(screen.getByLabelText('Frecuencia de ajuste (meses)'))
       await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '1')
 
       expect(
-        await screen.findByLabelText('Valor original (ene 2027 – ene 2027)'),
+        await screen.findByLabelText('Valor locativo (feb 2027 – feb 2027)'),
       ).toBeInTheDocument()
     })
 
@@ -1002,36 +1103,26 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-09-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
-      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
-      await screen.findByLabelText('Valor original (sep 2026 – dic 2026)')
-      // Sólo se completa el primer tramo; el segundo queda vacío.
-      await user.type(screen.getByLabelText('Valor original (sep 2026 – dic 2026)'), '100000')
+      await fillArsContract(user, { startDate: '2026-09-01', frequency: '4' })
+      await screen.findByLabelText('Valor locativo (ene 2027 – abr 2027)')
+      // El tramo pedido queda vacío.
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
 
       await waitFor(() => {
         expect(
-          screen.getByText('Ingresá el monto de "Primer aumento (ene 2027 – hoy)".'),
+          screen.getByText('Ingresá el monto de "Valor locativo (ene 2027 – abr 2027)".'),
         ).toBeInTheDocument()
       })
       expect(contractsApi.create).not.toHaveBeenCalled()
 
-      await user.type(screen.getByLabelText('Primer aumento (ene 2027 – hoy)'), '0')
+      await user.type(screen.getByLabelText('Valor locativo (ene 2027 – abr 2027)'), '0')
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
 
       await waitFor(() => {
         expect(
-          screen.getByText('El monto de "Primer aumento (ene 2027 – hoy)" debe ser mayor a 0.'),
+          screen.getByText(
+            'El monto de "Valor locativo (ene 2027 – abr 2027)" debe ser mayor a 0.',
+          ),
         ).toBeInTheDocument()
       })
       expect(contractsApi.create).not.toHaveBeenCalled()
@@ -1053,23 +1144,11 @@ describe('Módulo 3 — Contratos (#11)', () => {
       renderContractsApp('/contracts')
       const user = userEvent.setup()
 
-      await openCreateContractModal(user)
-      await screen.findByRole('option', { name: 'Av. Colón 1234' })
-      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
-      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
-      await user.type(screen.getByLabelText('Monto inicial'), '100000')
-      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-09-01')
-      await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
-      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
-      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), '4')
-      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
-
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
+      await fillArsContract(user, { startDate: '2026-09-01', frequency: '4' })
       await user.type(
-        await screen.findByLabelText('Valor original (sep 2026 – dic 2026)'),
-        '100000',
+        await screen.findByLabelText('Valor locativo (ene 2027 – abr 2027)'),
+        '115000',
       )
-      await user.type(screen.getByLabelText('Primer aumento (ene 2027 – hoy)'), '115000')
       await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
 
       await waitFor(
@@ -1104,9 +1183,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await user.type(screen.getByLabelText('Fecha de fin'), '2027-12-31')
       await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
 
-      await user.click(screen.getByLabelText('El contrato ya está en curso'))
-      expect(screen.getByLabelText('Monto vigente hoy')).toBeInTheDocument()
-      expect(screen.queryByLabelText(/Valor original/)).not.toBeInTheDocument()
+      expect(await screen.findByLabelText('Monto vigente hoy')).toBeInTheDocument()
+      expect(screen.queryByLabelText(/Valor locativo/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Completá primero la frecuencia/)).not.toBeInTheDocument()
 
       await user.type(screen.getByLabelText('Monto vigente hoy'), '1200')
       await user.type(screen.getByLabelText('Desde cuándo rige'), '2027-01')
@@ -1123,6 +1202,196 @@ describe('Módulo 3 — Contratos (#11)', () => {
       })
       const payload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
       expect(payload?.historical_amounts).toBeUndefined()
+    })
+  })
+
+  // Issue #69 — form de contrato v3 (feedback #3 del PO, 2026-08-29) ─────
+  describe('Issue #69 — form de contrato v3', () => {
+    beforeEach(() => {
+      // Ejemplo literal del PO: hoy 29/08/2026, inicio 01/07/2026 → en curso.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-08-29T12:00:00Z'))
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    async function fillArsContract(
+      user: ReturnType<typeof userEvent.setup>,
+      opts: { startDate: string; frequency: string; endDate: string },
+    ) {
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      await user.selectOptions(screen.getByLabelText('Inquilino'), 'r-1')
+      await user.type(screen.getByLabelText('Monto inicial'), '100000')
+      await user.type(screen.getByLabelText('Fecha de inicio'), opts.startDate)
+      await user.type(screen.getByLabelText('Fecha de fin'), opts.endDate)
+      await user.type(screen.getByLabelText('% de mora diaria'), '0.10')
+      await user.type(screen.getByLabelText('Frecuencia de ajuste (meses)'), opts.frequency)
+      await user.selectOptions(screen.getByLabelText('Índice de referencia'), 'icl')
+    }
+
+    it('CA-69-01: una propiedad con contrato activo (rented) aparece deshabilitada con la leyenda "Con contrato"', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      const available = await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      const rented = screen.getByRole('option', { name: 'Bv. San Juan 500 — Con contrato' })
+
+      expect(available).toBeEnabled()
+      expect(rented).toBeDisabled()
+
+      // El select no permite elegirla: el valor no cambia.
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-1')
+      expect(screen.getByLabelText('Propiedad')).toHaveValue('p-1')
+      await user.selectOptions(screen.getByLabelText('Propiedad'), 'p-2').catch(() => undefined)
+      expect(screen.getByLabelText('Propiedad')).not.toHaveValue('p-2')
+    })
+
+    it('CA-69-02: la frecuencia de ajuste (e índice) va ANTES de la sección de contrato en curso', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-07-01')
+
+      const frequency = screen.getByLabelText('Frecuencia de ajuste (meses)')
+      const index = screen.getByLabelText('Índice de referencia')
+      const inProgressSection = await screen.findByTestId('contract-in-progress-section')
+
+      const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING
+      expect(frequency.compareDocumentPosition(inProgressSection) & FOLLOWING).toBeTruthy()
+      expect(index.compareDocumentPosition(inProgressSection) & FOLLOWING).toBeTruthy()
+    })
+
+    it('CA-69-03: ARS en curso sin frecuencia cargada — la sección indica completarla primero', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      await screen.findByRole('option', { name: 'Av. Colón 1234' })
+      await user.type(screen.getByLabelText('Fecha de inicio'), '2026-07-01')
+
+      expect(await screen.findByText('Contrato en curso desde julio 2026')).toBeInTheDocument()
+      expect(
+        screen.getByText(/Completá primero la frecuencia de ajuste para calcular los aumentos/),
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText(/Valor locativo/)).not.toBeInTheDocument()
+    })
+
+    it('CA-69-04: inicio en un mes pasado sin tramos transcurridos → nota informativa, sin campos extra', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({ data: DRAFT_CONTRACT_ARS })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await fillArsContract(user, {
+        startDate: '2026-07-01',
+        frequency: '6',
+        endDate: '2028-06-30',
+      })
+
+      expect(await screen.findByText('Contrato en curso desde julio 2026')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          /Sin aumentos transcurridos: el monto inicial sigue vigente\. Los meses ya transcurridos se registran automáticamente como cobrados/,
+        ),
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText(/Valor locativo/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Monto vigente hoy')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => expect(contractsApi.create).toHaveBeenCalled())
+      const payload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
+      expect(payload?.historical_amounts).toBeUndefined()
+      expect(payload?.current_amount).toBeUndefined()
+    })
+
+    it('CA-69-05: con tramos transcurridos pide "Valor locativo (mes – mes)" sin repetir el valor original', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({ data: DRAFT_CONTRACT_ARS })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      // Inicio ene 2026, frecuencia 3 → tramos ene–mar, abr–jun, jul–sep (hoy = ago).
+      await fillArsContract(user, {
+        startDate: '2026-01-01',
+        frequency: '3',
+        endDate: '2027-12-31',
+      })
+
+      expect(
+        await screen.findByLabelText('Valor locativo (abr 2026 – jun 2026)'),
+      ).toBeInTheDocument()
+      expect(screen.getByLabelText('Valor locativo (jul 2026 – sep 2026)')).toBeInTheDocument()
+      expect(screen.getAllByLabelText(/Valor locativo/)).toHaveLength(2)
+      expect(screen.queryByLabelText(/Valor original/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/Primer aumento/)).not.toBeInTheDocument()
+
+      await user.type(screen.getByLabelText('Valor locativo (abr 2026 – jun 2026)'), '110000')
+      await user.type(screen.getByLabelText('Valor locativo (jul 2026 – sep 2026)'), '121000')
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => {
+        expect(contractsApi.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            initial_amount: '100000',
+            historical_amounts: ['100000', '110000', '121000'],
+          }),
+        )
+      })
+    })
+
+    it('CA-69-06: inicio este mes → alta normal, sin sección de contrato en curso', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.create).mockResolvedValueOnce({ data: DRAFT_CONTRACT_ARS })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await fillArsContract(user, {
+        startDate: '2026-08-01',
+        frequency: '6',
+        endDate: '2028-07-31',
+      })
+
+      expect(screen.queryByTestId('contract-in-progress-section')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Contrato en curso desde/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/Valor locativo/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Monto vigente hoy')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Crear contrato' }))
+
+      await waitFor(() => expect(contractsApi.create).toHaveBeenCalled())
+      const payload = vi.mocked(contractsApi.create).mock.calls[0]?.[0]
+      expect(payload?.historical_amounts).toBeUndefined()
+      expect(payload?.current_amount).toBeUndefined()
+      expect(payload?.current_amount_since).toBeUndefined()
     })
   })
 
@@ -1211,15 +1480,23 @@ describe('Módulo 3 — Contratos (#11)', () => {
       })
     })
 
-    it('CA-56-05: 422 CONTRACT_HAS_DEBT muestra el detalle de lo adeudado del contrato', async () => {
+    // Issue #70 punto 1: mensaje legible construido desde `details` (nunca
+    // el JSON crudo). Shape real del back (debt_certificate_service.py):
+    // { contract_id, property_id, periods_overdue, balance, days_late,
+    //   suggested_interest }.
+    it('CA-70-01: 422 CONTRACT_HAS_DEBT muestra un mensaje legible con interés sugerido (sin JSON)', async () => {
       setSession(OWNER_SESSION)
       mockDetailLinkDefaults()
       vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
       vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
       vi.mocked(contractsApi.downloadDebtCertificate).mockRejectedValueOnce(
         new AdminPropApiError('CONTRACT_HAS_DEBT', 422, 'El contrato tiene deuda pendiente.', null, {
-          overdue_periods: 2,
-          balance: '200000.00',
+          contract_id: 'c-2',
+          property_id: 'p-2',
+          periods_overdue: 1,
+          balance: '1450000.00',
+          days_late: 19,
+          suggested_interest: '137750.00',
         }),
       )
 
@@ -1230,12 +1507,77 @@ describe('Módulo 3 — Contratos (#11)', () => {
         await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
       )
 
-      await waitFor(() => {
-        expect(screen.getByText('El contrato tiene deuda pendiente.')).toBeInTheDocument()
-      })
-      expect(screen.getByTestId('contract-debt-certificate-details')).toHaveTextContent(
-        'overdue_periods',
+      expect(
+        await screen.findByText(
+          'El contrato tiene deuda pendiente: 1 período adeudado · saldo $1.450.000 · 19 días de mora · interés sugerido $137.750',
+        ),
+      ).toBeInTheDocument()
+      // Nada de bloques de código/JSON en la UI.
+      expect(document.querySelector('pre')).toBeNull()
+      expect(screen.getByTestId('contract-debt-certificate-details')).not.toHaveTextContent(
+        'periods_overdue',
       )
+      expect(screen.getByTestId('contract-debt-certificate-details')).not.toHaveTextContent('{')
+    })
+
+    it('CA-70-02: el mensaje de deuda pluraliza los períodos y omite el interés si el back no lo manda', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.downloadDebtCertificate).mockRejectedValueOnce(
+        new AdminPropApiError('CONTRACT_HAS_DEBT', 422, 'El contrato tiene deuda pendiente.', null, {
+          contract_id: 'c-2',
+          property_id: 'p-2',
+          periods_overdue: 2,
+          balance: '200000.50',
+          days_late: 1,
+        }),
+      )
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
+      )
+
+      // Plural en períodos, singular en días, centavos sólo si son reales.
+      expect(
+        await screen.findByText(
+          'El contrato tiene deuda pendiente: 2 períodos adeudados · saldo $200.000,50 · 1 día de mora',
+        ),
+      ).toBeInTheDocument()
+      expect(screen.getByTestId('contract-debt-certificate-details')).not.toHaveTextContent(
+        'interés sugerido',
+      )
+      expect(document.querySelector('pre')).toBeNull()
+    })
+
+    it('CA-70-03: 422 CONTRACT_HAS_DEBT con details vacío cae a un mensaje genérico legible', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.downloadDebtCertificate).mockRejectedValueOnce(
+        new AdminPropApiError(
+          'CONTRACT_HAS_DEBT',
+          422,
+          'El contrato tiene deuda pendiente.',
+          null,
+          {},
+        ),
+      )
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
+      )
+
+      expect(await screen.findByText('El contrato tiene deuda pendiente.')).toBeInTheDocument()
+      expect(document.querySelector('pre')).toBeNull()
     })
 
     it('CA-56-06: la ficha muestra el historial de valores locativos mes a mes', async () => {
@@ -1251,5 +1593,22 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(history).toHaveTextContent('110.000')
       expect(history).not.toHaveTextContent('110.000,00')
     })
+  })
+
+  // ── Issue #64 (ronda feedback #3 del PO) — BackLink ─────────────────────
+
+  it('CA-64-07: el BackLink de la ficha del contrato vuelve al listado de Contratos', async () => {
+    setSession(OWNER_SESSION)
+    mockDetailLinkDefaults()
+    vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+    vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+    vi.mocked(contractsApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderContractsApp('/contracts/c-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Contratos' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo contrato' })).toBeInTheDocument()
   })
 })

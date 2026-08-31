@@ -4,9 +4,11 @@
 // Issue #12 — CA-04-03..12 (lado UI; CA-04-01/02 son del job de
 // generación mensual, sin superficie de UI). Issue #33 — CA-33-01..05:
 // historial de cobros del período (`payments[]`, incluye anulados) con
-// recibo/anulación por fila.
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+// recibo/anulación por fila. Issue #72 (espejo de back#119) —
+// CA-04-13/14/15: cobros `origin = initial_load` con badge "Automático ·
+// alta de contrato en curso" y sin acciones de recibo/anular.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
@@ -146,6 +148,9 @@ const PAYMENT_FIXTURE: PaymentDetail = {
   notes: null,
   created_by: 'u-owner',
   created_at: '2026-07-15T00:00:00Z',
+  // back#119: origin distingue cobros manuales de los retroactivos de
+  // carga inicial — requerido por el tipo regenerado (sdd_03 v1.14).
+  origin: 'manual',
   voided_at: null,
   voided_by: null,
 }
@@ -238,7 +243,9 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
       .mockResolvedValueOnce({
         data: {
           ...RENT_PERIOD_PENDING,
-          payments: [{ ...PAYMENT_FIXTURE, charged_interest: '200.00', forgiven_interest: '300.00' }],
+          payments: [
+            { ...PAYMENT_FIXTURE, charged_interest: '200.00', forgiven_interest: '300.00' },
+          ],
         },
       }) // refetch tras invalidar (CA-33-05: registrar refresca el historial)
     vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
@@ -388,7 +395,98 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     expect(
       within(voidedRow).queryByRole('button', { name: 'Descargar recibo' }),
     ).not.toBeInTheDocument()
-    expect(within(voidedRow).queryByRole('button', { name: 'Anular cobro' })).not.toBeInTheDocument()
+    expect(
+      within(voidedRow).queryByRole('button', { name: 'Anular cobro' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('CA-04-13: un cobro initial_load muestra el badge "Automático · alta de contrato en curso"; los manuales no (issue #72, back#119)', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: {
+        ...RENT_PERIOD_PENDING,
+        payments: [
+          { ...PAYMENT_FIXTURE, id: 'pay-manual' },
+          {
+            ...PAYMENT_FIXTURE,
+            id: 'pay-initial',
+            origin: 'initial_load',
+            suggested_interest: '0.00',
+            charged_interest: '0.00',
+          },
+        ],
+      },
+    })
+    vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
+      rent_period_id: 'rp-1',
+      payment_date: '2026-07-15',
+      balance: '100000.00',
+      days_late: 5,
+      suggested_interest: '500.00',
+    })
+
+    renderPaymentsApp('/payments/rp-1')
+
+    const rows = await screen.findAllByTestId('payment-history-row')
+    expect(rows).toHaveLength(2)
+
+    const manualRow = rows[0]!
+    const initialLoadRow = rows[1]!
+
+    expect(manualRow).toHaveAttribute('data-origin', 'manual')
+    expect(
+      within(manualRow).queryByTestId('payment-initial-load-badge'),
+    ).not.toBeInTheDocument()
+
+    expect(initialLoadRow).toHaveAttribute('data-origin', 'initial_load')
+    expect(within(initialLoadRow).getByTestId('payment-initial-load-badge')).toHaveTextContent(
+      'Automático · alta de contrato en curso',
+    )
+  })
+
+  it('CA-04-14/CA-04-15: un cobro initial_load no ofrece recibo ni anulación; un manual sí (issue #72, back#119)', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: {
+        ...RENT_PERIOD_PENDING,
+        payments: [
+          { ...PAYMENT_FIXTURE, id: 'pay-manual' },
+          { ...PAYMENT_FIXTURE, id: 'pay-initial', origin: 'initial_load' },
+        ],
+      },
+    })
+    vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
+      rent_period_id: 'rp-1',
+      payment_date: '2026-07-15',
+      balance: '100000.00',
+      days_late: 5,
+      suggested_interest: '500.00',
+    })
+
+    renderPaymentsApp('/payments/rp-1')
+
+    const rows = await screen.findAllByTestId('payment-history-row')
+    expect(rows).toHaveLength(2)
+
+    const manualRow = rows[0]!
+    const initialLoadRow = rows[1]!
+
+    // Cobro manual: ambas acciones disponibles (sesión con payment:void).
+    expect(within(manualRow).getByRole('button', { name: 'Descargar recibo' })).toBeInTheDocument()
+    expect(within(manualRow).getByRole('button', { name: 'Anular cobro' })).toBeInTheDocument()
+
+    // Cobro initial_load: sin acciones — el backend respondería 422
+    // BUSINESS_RULE_VIOLATION (RN-08/RN-P09); la UI lo previene con
+    // una leyenda de solo lectura.
+    expect(
+      within(initialLoadRow).queryByRole('button', { name: 'Descargar recibo' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(initialLoadRow).queryByRole('button', { name: 'Anular cobro' }),
+    ).not.toBeInTheDocument()
+    expect(initialLoadRow).toHaveTextContent(
+      'Cobro automático de la carga inicial — sin recibo ni anulación.',
+    )
   })
 
   it('CA-33-03: se puede descargar el recibo de un cobro activo desde su fila del historial', async () => {
@@ -429,7 +527,11 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
       suggested_interest: '500.00',
     })
     vi.mocked(paymentsApi.downloadReceipt).mockRejectedValueOnce(
-      new AdminPropApiError('BUSINESS_RULE_VIOLATION', 422, 'La operación viola una regla de negocio.'),
+      new AdminPropApiError(
+        'BUSINESS_RULE_VIOLATION',
+        422,
+        'La operación viola una regla de negocio.',
+      ),
     )
 
     renderPaymentsApp('/payments/rp-1')
@@ -450,7 +552,9 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
       .mockResolvedValueOnce({
         data: {
           ...RENT_PERIOD_PENDING,
-          payments: [{ ...PAYMENT_FIXTURE, voided_at: '2026-07-16T00:00:00Z', voided_by: 'u-owner' }],
+          payments: [
+            { ...PAYMENT_FIXTURE, voided_at: '2026-07-16T00:00:00Z', voided_by: 'u-owner' },
+          ],
         },
       })
     vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
@@ -581,4 +685,139 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
   // /renters/:id/debt-certificate` fue eliminado del backend; el libre
   // deuda ahora es por CONTRATO (`ContractDebtCertificateButton`, ver
   // `src/modules/contracts/__tests__/contracts.spec.tsx`).
+})
+
+// Issue #71 — panel del mes: selector de período libre (flechas + input de
+// mes) y etiqueta capitalizada. El período viaja en el query key de
+// TanStack, así cada cambio dispara `GET /rent-periods?period=YYYY-MM`.
+describe('Módulo 4 — Cobranzas: selector de período del panel (#71)', () => {
+  const RENT_PERIOD_JULY = { ...RENT_PERIOD_PENDING, id: 'rp-jul', period: '2026-07-01' }
+
+  function lastListedPeriod(): string | undefined {
+    const calls = vi.mocked(paymentsApi.listRentPeriods).mock.calls
+    return calls[calls.length - 1]?.[0]?.period
+  }
+
+  beforeEach(() => {
+    // Sólo Date: userEvent sigue usando timers reales.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0)) // agosto 2026, hora local
+    setSession(OWNER_SESSION)
+    mockOptionDefaults()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+    useSessionStore.setState({ session: null, logoutReason: null, isBootstrapping: true })
+  })
+
+  it('CA-71-01: el período del panel se muestra capitalizado y sin "de" ("Agosto 2026")', async () => {
+    vi.mocked(paymentsApi.listRentPeriods).mockResolvedValue({
+      data: [RENT_PERIOD_PENDING],
+      meta: {},
+    })
+
+    renderPaymentsApp('/payments')
+
+    await screen.findByRole('table')
+    expect(screen.getByTestId('rent-periods-period-label')).toHaveTextContent(/^Agosto 2026$/)
+    expect(screen.queryByText(/agosto de 2026/i)).not.toBeInTheDocument()
+    expect(lastListedPeriod()).toBe('2026-08')
+  })
+
+  it('CA-71-02: las flechas ◀ ▶ cambian el mes y recargan el panel con el nuevo período en la llamada', async () => {
+    const user = userEvent.setup()
+    vi.mocked(paymentsApi.listRentPeriods)
+      .mockResolvedValueOnce({ data: [RENT_PERIOD_PENDING], meta: {} })
+      .mockResolvedValueOnce({ data: [RENT_PERIOD_JULY], meta: {} })
+
+    renderPaymentsApp('/payments')
+    await screen.findByRole('table')
+
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }))
+
+    await waitFor(() => expect(lastListedPeriod()).toBe('2026-07'))
+    expect(screen.getByTestId('rent-periods-period-label')).toHaveTextContent(/^Julio 2026$/)
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Registrar cobro' })).toHaveAttribute(
+        'href',
+        '/payments/rp-jul',
+      ),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }))
+
+    // Volver a agosto se sirve del caché de TanStack (mismo query key,
+    // staleTime 60s): el panel muestra otra vez los períodos de agosto.
+    expect(screen.getByTestId('rent-periods-period-label')).toHaveTextContent(/^Agosto 2026$/)
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Registrar cobro' })).toHaveAttribute(
+        'href',
+        '/payments/rp-1',
+      ),
+    )
+    expect(
+      vi.mocked(paymentsApi.listRentPeriods).mock.calls.map((call) => call[0]?.period),
+    ).toEqual(['2026-08', '2026-07'])
+  })
+
+  it('CA-71-02: el input de mes permite saltar a cualquier período, incluso futuro, y recarga el panel', async () => {
+    vi.mocked(paymentsApi.listRentPeriods).mockResolvedValue({
+      data: [RENT_PERIOD_PENDING],
+      meta: {},
+    })
+
+    renderPaymentsApp('/payments')
+    await screen.findByRole('table')
+
+    fireEvent.change(screen.getByLabelText('Elegir período'), { target: { value: '2027-01' } })
+
+    await waitFor(() => expect(lastListedPeriod()).toBe('2027-01'))
+    expect(screen.getByTestId('rent-periods-period-label')).toHaveTextContent(/^Enero 2027$/)
+
+    fireEvent.change(screen.getByLabelText('Elegir período'), { target: { value: '2024-03' } })
+
+    await waitFor(() => expect(lastListedPeriod()).toBe('2024-03'))
+    expect(screen.getByTestId('rent-periods-period-label')).toHaveTextContent(/^Marzo 2024$/)
+  })
+
+  it('CA-71-02: borrar el input de mes no dispara un request sin período (el panel no vuelve al mes actual)', async () => {
+    vi.mocked(paymentsApi.listRentPeriods).mockResolvedValue({
+      data: [RENT_PERIOD_PENDING],
+      meta: {},
+    })
+
+    renderPaymentsApp('/payments')
+    await screen.findByRole('table')
+
+    fireEvent.change(screen.getByLabelText('Elegir período'), { target: { value: '' } })
+
+    expect(screen.getByTestId('rent-periods-period-label')).toHaveTextContent(/^Agosto 2026$/)
+    expect(paymentsApi.listRentPeriods).toHaveBeenCalledTimes(1)
+    expect(
+      vi
+        .mocked(paymentsApi.listRentPeriods)
+        .mock.calls.every((call) => call[0]?.period === '2026-08'),
+    ).toBe(true)
+  })
+
+  it('CA-71-03: un mes sin períodos muestra un estado vacío claro con el mes, nunca un error', async () => {
+    const user = userEvent.setup()
+    vi.mocked(paymentsApi.listRentPeriods)
+      .mockResolvedValueOnce({ data: [RENT_PERIOD_PENDING], meta: {} })
+      .mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPaymentsApp('/payments')
+    await screen.findByRole('table')
+
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }))
+
+    expect(await screen.findByText('No hay períodos para Julio 2026')).toBeInTheDocument()
+    expect(
+      screen.getByText('Podés navegar a otro mes con las flechas o eligiendo un período.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })

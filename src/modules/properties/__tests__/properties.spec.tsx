@@ -3,7 +3,7 @@
 // SDD: spec_module_01_propiedades.md RF-01..RF-04 + sdd_03 §7-8 (v1.6).
 // Issue #10 — CA-01-01..06 (lado UI).
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
@@ -308,6 +308,76 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     expect(screen.getByText('7007')).toBeInTheDocument()
   })
 
+  it('CA-65: "Agregar cuenta" agrega una fila inline al final de la tabla, Guardar crea la cuenta y Cancelar la quita', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.listServiceAccounts).mockResolvedValue({ data: SERVICE_ACCOUNTS })
+    vi.mocked(propertiesApi.createServiceAccount).mockResolvedValueOnce({
+      data: {
+        id: 'sa-new',
+        property_id: 'p-1',
+        service_type: 'otro',
+        account_number: '9009',
+        secondary_number: null,
+        notes: null,
+        created_at: '2026-08-01T00:00:00Z',
+        updated_at: '2026-08-01T00:00:00Z',
+      },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByText('1001'))
+
+    // Sin fila abierta, no hay form permanente de alta.
+    expect(screen.queryByLabelText('N° de cuenta / cliente')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Agregar cuenta' }))
+    await user.type(screen.getByLabelText('N° de cuenta / cliente'), '9009')
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(propertiesApi.createServiceAccount).toHaveBeenCalledWith(
+      'p-1',
+      expect.objectContaining({ account_number: '9009' }),
+    )
+
+    // La fila vuelve a modo lectura (no queda el form de alta abierto).
+    await waitFor(() => {
+      expect(screen.queryByLabelText('N° de cuenta / cliente')).not.toBeInTheDocument()
+    })
+
+    // Cancelar quita la fila sin crear nada.
+    await user.click(screen.getByRole('button', { name: 'Agregar cuenta' }))
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByLabelText('N° de cuenta / cliente')).not.toBeInTheDocument()
+  })
+
+  it('CA-65: "Eliminar" una cuenta de servicio pide confirmación y solo borra al confirmar', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.listServiceAccounts).mockResolvedValue({ data: SERVICE_ACCOUNTS })
+    vi.mocked(propertiesApi.deleteServiceAccount).mockResolvedValueOnce(undefined)
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByText('1001'))
+
+    const row = screen.getByText('1001').closest('tr')!
+    await user.click(within(row).getByRole('button', { name: 'Eliminar' }))
+
+    // Sin confirmar todavía no dispara el mutate.
+    expect(propertiesApi.deleteServiceAccount).not.toHaveBeenCalled()
+    expect(screen.getByText('¿Eliminar la cuenta de Rentas?')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+    await waitFor(() => {
+      expect(propertiesApi.deleteServiceAccount).toHaveBeenCalledWith('sa-1')
+    })
+  })
+
   it('CA-01-03: borrar una propiedad con contrato activo devuelve el mensaje de ENTITY_HAS_DEPENDENCIES', async () => {
     setSession(OWNER_SESSION)
     mockFichaDefaults()
@@ -357,6 +427,10 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     })
 
     renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
 
     await waitFor(() => screen.getByTestId('property-status-rented'))
     expect(screen.getByTestId('property-status-rented')).toHaveTextContent(/estado automático/i)
@@ -582,6 +656,9 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     renderPropertiesApp('/properties/p-1')
     const user = userEvent.setup()
 
+    // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
+
     await waitFor(() => screen.getByTestId('property-status-rented'))
     await user.selectOptions(screen.getByLabelText('Barrio'), 'n-1')
 
@@ -625,6 +702,9 @@ describe('Módulo 1 — Propiedades (#10)', () => {
 
     renderPropertiesApp('/properties/p-1')
     const user = userEvent.setup()
+
+    // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
 
     await waitFor(() => screen.getByLabelText('Estado'))
     await user.selectOptions(screen.getByLabelText('Estado'), 'unavailable')
@@ -676,5 +756,130 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     await waitFor(() => screen.getByTestId('property-active-contract'))
     const contractLink = screen.getByRole('link', { name: 'Ver contrato' })
     expect(contractLink).toHaveAttribute('href', '/contracts/c-1')
+  })
+
+  // ── Issue #64 (ronda feedback #3 del PO) — BackLink; issue #68: el acceso
+  // a Barrios es un botón secundario junto a "Nueva propiedad" ─────────────
+
+  it('CA-68-01: "Barrios" es un botón secundario (outline) junto a "Nueva propiedad" y navega al catálogo', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(propertiesApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPropertiesApp('/properties')
+    const user = userEvent.setup()
+
+    const newPropertyButton = await screen.findByRole('button', { name: 'Nueva propiedad' })
+    const neighborhoodsLink = screen.getByRole('link', { name: 'Barrios' })
+    expect(neighborhoodsLink).toHaveAttribute('href', '/properties/neighborhoods')
+    // Ya no es tab: comparten el mismo contenedor a la derecha del título.
+    expect(neighborhoodsLink.parentElement).toBe(newPropertyButton.parentElement)
+    expect(screen.queryByRole('navigation', { name: 'Propiedades' })).not.toBeInTheDocument()
+
+    await user.click(neighborhoodsLink)
+
+    expect(await screen.findByRole('button', { name: 'Nuevo barrio' })).toBeInTheDocument()
+    expect(screen.getByText('Nueva Córdoba')).toBeInTheDocument()
+  })
+
+  it('CA-64-05: el BackLink de la ficha de la propiedad vuelve al listado de Propiedades', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.list).mockResolvedValueOnce({ data: [PROPERTY_SUMMARY], meta: {} })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Propiedades' }))
+
+    expect(await screen.findByRole('button', { name: 'Nueva propiedad' })).toBeInTheDocument()
+    expect(screen.getByText('Av. Colón 1234')).toBeInTheDocument()
+  })
+
+  // ── Issue #66 (ronda feedback #3 del PO) — modo lectura por defecto ────
+
+  it('CA-66-01: la ficha de la propiedad arranca en modo lectura con los datos como texto', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+
+    renderPropertiesApp('/properties/p-1')
+
+    expect(await screen.findByTestId('property-read-view')).toBeInTheDocument()
+    expect(screen.getByTestId('property-read-view')).toHaveTextContent('Av. Colón 1234')
+    expect(screen.queryByLabelText('Dirección')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument()
+  })
+
+  it('CA-66-02: "Editar" habilita los campos y "Guardar cambios" persiste y vuelve a modo lectura', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+    vi.mocked(propertiesApi.update).mockResolvedValueOnce({
+      data: { ...PROPERTY_DETAIL, address: 'Av. Colón 2000' },
+    })
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
+    const addressInput = screen.getByLabelText('Dirección')
+    await user.clear(addressInput)
+    await user.type(addressInput, 'Av. Colón 2000')
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('property-read-view')).toBeInTheDocument()
+    })
+    expect(screen.queryByLabelText('Dirección')).not.toBeInTheDocument()
+    expect(screen.getByText('Propiedad actualizada.')).toBeInTheDocument()
+  })
+
+  it('CA-66-03: "Cancelar" descarta los cambios y vuelve a modo lectura sin guardar', async () => {
+    setSession(OWNER_SESSION)
+    mockFichaDefaults()
+
+    renderPropertiesApp('/properties/p-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
+    await user.clear(screen.getByLabelText('Dirección'))
+    await user.type(screen.getByLabelText('Dirección'), 'Dirección descartada')
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.getByTestId('property-read-view')).toBeInTheDocument()
+    expect(screen.getByTestId('property-read-view')).toHaveTextContent('Av. Colón 1234')
+    expect(propertiesApi.update).not.toHaveBeenCalled()
+  })
+
+  it('CA-66-04: sin `property:manage`, la ficha muestra solo lectura sin botón "Editar"', async () => {
+    const READ_ONLY_SESSION = buildSession({
+      userId: 'u-readonly',
+      email: 'readonly@inmobiliaria-sur.com',
+      fullName: 'Solo Lectura',
+      organization: { id: 'org-1', name: 'Inmobiliaria Sur', role: 'admin' },
+      permissions: ['property:read', 'contract:read', 'renter:read'],
+      isSuperAdmin: false,
+    })
+    setSession(READ_ONLY_SESSION)
+    mockFichaDefaults()
+
+    renderPropertiesApp('/properties/p-1')
+
+    expect(await screen.findByTestId('property-read-view')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument()
+  })
+
+  it('CA-64-06: el BackLink de Barrios vuelve al listado de Propiedades', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(neighborhoodsApi.list).mockResolvedValue(NEIGHBORHOOD_LIST)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORD_LIST)
+    vi.mocked(propertiesApi.list).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPropertiesApp('/properties/neighborhoods')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Propiedades' }))
+
+    expect(await screen.findByRole('button', { name: 'Nueva propiedad' })).toBeInTheDocument()
   })
 })

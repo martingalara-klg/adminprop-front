@@ -204,12 +204,79 @@ describe('Módulo 7 — Administración (#8)', () => {
 
     await waitFor(() => screen.getByText('Admin Uno'))
     const adminRow = screen.getByText('Admin Uno').closest('tr')!
+    // Issue #65 (auditoría de destructivos): "Desactivar" ahora pide
+    // confirmación en 2 pasos antes de disparar el mutate.
     await user.click(within(adminRow).getByRole('button', { name: 'Desactivar' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
 
     await waitFor(() => {
       expect(
         screen.getByText('Debe quedar al menos un owner activo. Designá otro owner antes.'),
       ).toBeInTheDocument()
+    })
+  })
+
+  it('CA-65: "Desactivar" un usuario pide confirmación de 2 pasos y solo desactiva al confirmar', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(adminApi.listUsers).mockResolvedValue({
+      data: [SOLE_ACTIVE_OWNER, ADMIN_MEMBER],
+      meta: {},
+    })
+    vi.mocked(adminApi.listInvitations).mockResolvedValue({ data: [], meta: {} })
+    vi.mocked(adminApi.deactivateUser).mockResolvedValueOnce(undefined)
+
+    renderAdminApp('/admin')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByText('Admin Uno'))
+    const adminRow = screen.getByText('Admin Uno').closest('tr')!
+    await user.click(within(adminRow).getByRole('button', { name: 'Desactivar' }))
+
+    // Sin confirmar todavía no dispara el mutate.
+    expect(adminApi.deactivateUser).not.toHaveBeenCalled()
+    expect(screen.getByText(/¿Desactivar a Admin Uno\?/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+    await waitFor(() => {
+      expect(adminApi.deactivateUser).toHaveBeenCalledWith('u-admin')
+    })
+  })
+
+  it('CA-65: "Cancelar" una invitación pide confirmación de 2 pasos y solo revoca al confirmar', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(adminApi.listUsers).mockResolvedValue({ data: [SOLE_ACTIVE_OWNER], meta: {} })
+    vi.mocked(adminApi.listInvitations).mockResolvedValue({
+      data: [
+        {
+          id: 'inv-1',
+          email: 'maintenance@inmobiliaria-sur.com',
+          role: 'maintenance',
+          status: 'pending',
+          expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+          created_at: new Date().toISOString(),
+        },
+      ],
+      meta: {},
+    })
+    vi.mocked(adminApi.revokeInvitation).mockResolvedValueOnce(undefined)
+
+    renderAdminApp('/admin')
+    const user = userEvent.setup()
+
+    await waitFor(() => screen.getByText('maintenance@inmobiliaria-sur.com'))
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    // Sin confirmar todavía no dispara el mutate.
+    expect(adminApi.revokeInvitation).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('¿Cancelar la invitación a maintenance@inmobiliaria-sur.com?'),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+    await waitFor(() => {
+      expect(adminApi.revokeInvitation).toHaveBeenCalledWith('inv-1')
     })
   })
 
@@ -310,7 +377,12 @@ describe('Módulo 7 — Administración (#8)', () => {
     renderAdminApp('/admin/settings')
     const user = userEvent.setup()
 
-    const graceDayInput = await screen.findByLabelText('Día de gracia (mora)')
+    // Issue #66: la configuración arranca en modo lectura.
+    expect(await screen.findByTestId('organization-settings-view')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Día de gracia (mora)')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+    const graceDayInput = screen.getByLabelText('Día de gracia (mora)')
     await user.clear(graceDayInput)
     await user.type(graceDayInput, '15')
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
@@ -321,5 +393,33 @@ describe('Módulo 7 — Administración (#8)', () => {
       )
     })
     expect(await screen.findByText(/El nuevo día de gracia rige desde ahora/)).toBeInTheDocument()
+    // Guardar OK vuelve a modo lectura.
+    expect(screen.queryByLabelText('Día de gracia (mora)')).not.toBeInTheDocument()
+  })
+
+  // ── Issue #66 (ronda feedback #3 del PO) — modo lectura por defecto ────
+
+  it('CA-66-01: "Cancelar" en la configuración de la organización descarta y vuelve a modo lectura', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(adminApi.getSettings).mockResolvedValueOnce({
+      data: {
+        grace_day: 10,
+        contract_expiry_notice_days: 60,
+        billing_header: { name: 'Inmobiliaria Sur', cuit: null, contact: null },
+      },
+    })
+
+    renderAdminApp('/admin/settings')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Editar' }))
+    const graceDayInput = screen.getByLabelText('Día de gracia (mora)')
+    await user.clear(graceDayInput)
+    await user.type(graceDayInput, '20')
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.getByTestId('organization-settings-view')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Día de gracia (mora)')).not.toBeInTheDocument()
+    expect(adminApi.updateSettings).not.toHaveBeenCalled()
   })
 })

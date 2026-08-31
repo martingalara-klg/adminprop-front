@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, ForbiddenState } from '@/shared/components'
+import { Spinner, ErrorState, ForbiddenState, BackLink } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { SettlementScope } from '@/api/settlements.api'
 import type { RegenerateSettlementInput } from '../schemas/settlement.schema'
@@ -68,6 +68,8 @@ export function SettlementDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <BackLink to="/settlements" label="Liquidaciones" />
+
       <header>
         <h1 className="text-lg font-semibold">Liquidación — período {settlement.period.slice(0, 7)}</h1>
       </header>

@@ -154,19 +154,29 @@ describe('Módulo 2 — Personas (#9)', () => {
     vi.mocked(peopleApi.getLandlord).mockResolvedValue({ data: LANDLORD_DETAIL })
 
     const { unmount } = renderPeopleApp('/people/landlords/l-1')
+    const user = userEvent.setup()
 
     await waitFor(() => screen.getByTestId('landlord-commission-readonly'))
     expect(screen.getByTestId('landlord-commission-readonly')).toHaveTextContent('10%')
     expect(screen.queryByLabelText('% de comisión')).not.toBeInTheDocument()
     expect(screen.getByText('Solo el owner puede cambiar el % de comisión.')).toBeInTheDocument()
-    // Datos de contacto SÍ son editables por el admin.
+    // Issue #66: la comisión nunca ofrece "Editar" a un admin (sin
+    // landlord:set-commission) — ni siquiera el header lo muestra.
+    expect(
+      screen.queryByTestId('landlord-commission-section-edit-button'),
+    ).not.toBeInTheDocument()
+    // Datos de contacto SÍ son editables por el admin — Issue #66: modo
+    // lectura por defecto, "Editar" habilita los campos.
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
     expect(screen.getByLabelText('Nombre')).toBeEnabled()
     unmount()
 
     setSession(OWNER_SESSION)
     renderPeopleApp('/people/landlords/l-1')
 
-    await waitFor(() => screen.getByLabelText('% de comisión'))
+    await waitFor(() => screen.getByTestId('landlord-commission-section-edit-button'))
+    await user.click(screen.getByTestId('landlord-commission-section-edit-button'))
+    expect(screen.getByLabelText('% de comisión')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Actualizar comisión' })).toBeInTheDocument()
   })
 
@@ -180,7 +190,8 @@ describe('Módulo 2 — Personas (#9)', () => {
     renderPeopleApp('/people/landlords/l-1')
     const user = userEvent.setup()
 
-    const commissionInput = await screen.findByLabelText('% de comisión')
+    await user.click(await screen.findByTestId('landlord-commission-section-edit-button'))
+    const commissionInput = screen.getByLabelText('% de comisión')
     await user.clear(commissionInput)
     await user.type(commissionInput, '15')
     await user.click(screen.getByRole('button', { name: 'Actualizar comisión' }))
@@ -190,9 +201,13 @@ describe('Módulo 2 — Personas (#9)', () => {
     })
   })
 
-  it('CA-02-03: al cambiar la comisión, la UI indica que rige desde la próxima liquidación', async () => {
+  it('CA-02-03: al cambiar la comisión, la UI indica que rige desde la próxima liquidación y vuelve a modo lectura', async () => {
     setSession(OWNER_SESSION)
-    vi.mocked(peopleApi.getLandlord).mockResolvedValue({ data: LANDLORD_DETAIL })
+    vi.mocked(peopleApi.getLandlord)
+      .mockResolvedValueOnce({ data: LANDLORD_DETAIL })
+      // useUpdateLandlord invalida ['people','landlords','detail', id] al
+      // aplicar el cambio — el refetch pide getLandlord otra vez.
+      .mockResolvedValueOnce({ data: { ...LANDLORD_DETAIL, commission_pct: '15.00' } })
     vi.mocked(peopleApi.updateLandlord).mockResolvedValueOnce({
       data: { ...LANDLORD_DETAIL, commission_pct: '15.00' },
     })
@@ -200,7 +215,8 @@ describe('Módulo 2 — Personas (#9)', () => {
     renderPeopleApp('/people/landlords/l-1')
     const user = userEvent.setup()
 
-    const commissionInput = await screen.findByLabelText('% de comisión')
+    await user.click(await screen.findByTestId('landlord-commission-section-edit-button'))
+    const commissionInput = screen.getByLabelText('% de comisión')
     await user.clear(commissionInput)
     await user.type(commissionInput, '15')
     await user.click(screen.getByRole('button', { name: 'Actualizar comisión' }))
@@ -208,6 +224,9 @@ describe('Módulo 2 — Personas (#9)', () => {
     expect(
       await screen.findByText(/% de comisión actualizado\. Rige desde la próxima liquidación\./),
     ).toBeInTheDocument()
+    // Issue #66: Guardar OK vuelve a modo lectura.
+    expect(screen.queryByLabelText('% de comisión')).not.toBeInTheDocument()
+    expect(screen.getByTestId('landlord-commission-readonly')).toHaveTextContent('15%')
   })
 
   it('CA-02-04: el listado de propietarios nunca muestra bank_info; la ficha sí lo expone', async () => {
@@ -224,8 +243,11 @@ describe('Módulo 2 — Personas (#9)', () => {
 
     vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({ data: LANDLORD_DETAIL })
     renderPeopleApp('/people/landlords/l-1')
+    const user = userEvent.setup()
 
-    const bankInfoInput = await screen.findByLabelText('Datos bancarios')
+    // Issue #66: la ficha arranca en modo lectura — hay que abrir edición.
+    await user.click(await screen.findByTestId('landlord-contact-section-edit-button'))
+    const bankInfoInput = screen.getByLabelText('Datos bancarios (CBU)')
     expect(bankInfoInput).toHaveValue('CBU 0000000000000000000000')
   })
 
@@ -278,7 +300,7 @@ describe('Módulo 2 — Personas (#9)', () => {
 
     renderPeopleApp('/people/renters/r-1')
 
-    await waitFor(() => screen.getByText('María López'))
+    await waitFor(() => screen.getByRole('heading', { name: 'María López' }))
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText('150.000')).toBeInTheDocument()
     expect(screen.getByText('45')).toBeInTheDocument()
@@ -395,5 +417,107 @@ describe('Módulo 2 — Personas (#9)', () => {
     // CA-55-01: labels de tipo capitalizados (incluye `duplex`).
     expect(screen.getByText('Departamento')).toBeInTheDocument()
     expect(screen.getByText('Duplex')).toBeInTheDocument()
+  })
+
+  // ── Issue #64 (ronda feedback #3 del PO) — tabs + BackLink ──────────────
+
+  it('CA-64-01: las tabs Propietarios/Inquilinos cambian el contenido y la URL de Personas', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.listLandlords).mockResolvedValueOnce({ data: [], meta: {} })
+    vi.mocked(peopleApi.listRenters).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPeopleApp('/people')
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole('button', { name: 'Nuevo propietario' })).toBeInTheDocument()
+    expect(peopleApi.listRenters).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('link', { name: 'Inquilinos' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo inquilino' })).toBeInTheDocument()
+    expect(peopleApi.listRenters).toHaveBeenCalled()
+  })
+
+  it('CA-64-02: el BackLink de la ficha del propietario vuelve al listado de Propietarios', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({ data: LANDLORD_DETAIL })
+    vi.mocked(peopleApi.listLandlords).mockResolvedValueOnce({ data: [LANDLORD_SUMMARY], meta: {} })
+
+    renderPeopleApp('/people/landlords/l-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Propietarios' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo propietario' })).toBeInTheDocument()
+    expect(screen.getByText('Juan Pérez')).toBeInTheDocument()
+  })
+
+  // ── Issue #66 (ronda feedback #3 del PO) — modo lectura por defecto ────
+
+  it('CA-66-01: la ficha del propietario arranca en modo lectura con "Editar" para habilitar los campos', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({ data: LANDLORD_DETAIL })
+
+    renderPeopleApp('/people/landlords/l-1')
+
+    expect(await screen.findByTestId('landlord-contact-view')).toBeInTheDocument()
+    expect(screen.getByTestId('landlord-contact-view')).toHaveTextContent('Juan Pérez')
+    expect(screen.queryByLabelText('Nombre')).not.toBeInTheDocument()
+  })
+
+  it('CA-66-02: "Cancelar" en los datos de contacto del propietario descarta y vuelve a lectura', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValueOnce({ data: LANDLORD_DETAIL })
+
+    renderPeopleApp('/people/landlords/l-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByTestId('landlord-contact-section-edit-button'))
+    await user.clear(screen.getByLabelText('Nombre'))
+    await user.type(screen.getByLabelText('Nombre'), 'Descartado')
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.getByTestId('landlord-contact-view')).toHaveTextContent('Juan Pérez')
+    expect(peopleApi.updateLandlord).not.toHaveBeenCalled()
+  })
+
+  it('CA-66-03: la ficha del inquilino arranca en modo lectura; "Editar" habilita y "Guardar" vuelve a lectura', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getRenter).mockResolvedValueOnce({ data: RENTER_DETAIL })
+    vi.mocked(peopleApi.getRenterDebt).mockResolvedValueOnce({ data: [] })
+    vi.mocked(peopleApi.updateRenter).mockResolvedValueOnce({
+      data: { ...RENTER_DETAIL, phone: '3510000000' },
+    })
+
+    renderPeopleApp('/people/renters/r-1')
+    const user = userEvent.setup()
+
+    expect(await screen.findByTestId('renter-contact-view')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Teléfono')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+    const phoneInput = screen.getByLabelText('Teléfono')
+    await user.clear(phoneInput)
+    await user.type(phoneInput, '3510000000')
+    await user.click(screen.getByRole('button', { name: 'Guardar datos de contacto' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('renter-contact-view')).toBeInTheDocument()
+    })
+    expect(screen.queryByLabelText('Teléfono')).not.toBeInTheDocument()
+  })
+
+  it('CA-64-03: el BackLink de la ficha del inquilino vuelve al listado de Inquilinos', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getRenter).mockResolvedValueOnce({ data: RENTER_DETAIL })
+    vi.mocked(peopleApi.getRenterDebt).mockResolvedValueOnce({ data: [] })
+    vi.mocked(peopleApi.listRenters).mockResolvedValueOnce({ data: [], meta: {} })
+
+    renderPeopleApp('/people/renters/r-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Volver a Inquilinos' }))
+
+    expect(await screen.findByRole('button', { name: 'Nuevo inquilino' })).toBeInTheDocument()
   })
 })
