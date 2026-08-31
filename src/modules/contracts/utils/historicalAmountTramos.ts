@@ -27,6 +27,8 @@
 // puramente derivación de UI a partir de datos que el usuario ya
 // ingresó (start_date, frecuencia), no una regla de negocio nueva.
 
+import { formatPeriodLabel } from '@/shared/utils/format'
+
 const MONTH_LABELS_ES = [
   'ene',
   'feb',
@@ -40,21 +42,6 @@ const MONTH_LABELS_ES = [
   'oct',
   'nov',
   'dic',
-] as const
-
-const MONTH_FULL_LABELS_ES = [
-  'enero',
-  'febrero',
-  'marzo',
-  'abril',
-  'mayo',
-  'junio',
-  'julio',
-  'agosto',
-  'septiembre',
-  'octubre',
-  'noviembre',
-  'diciembre',
 ] as const
 
 export type HistoricalAmountTramo = {
@@ -106,11 +93,15 @@ function isValidIsoDate(iso: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(iso)
 }
 
-/** "julio 2026" — para la nota informativa de contrato en curso (es-AR). */
+/**
+ * "Julio 2026" — para la nota informativa de contrato en curso (es-AR).
+ * Issue #78: unificado con `formatPeriodLabel` (capitalizado, mismo
+ * formato que el `PeriodSelector` compartido). Los labels de tramo con
+ * mes corto ("jul 2026 – dic 2026") quedan como están.
+ */
 export function formatMonthLong(iso: string): string {
   if (!isValidIsoDate(iso)) return ''
-  const { y, m } = parseIsoDate(iso)
-  return `${MONTH_FULL_LABELS_ES[m - 1] ?? ''} ${y}`
+  return formatPeriodLabel(iso)
 }
 
 /**

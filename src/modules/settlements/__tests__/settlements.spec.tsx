@@ -3,8 +3,8 @@
 // SDD: spec_module_05_liquidaciones.md §RF-01..RF-05 + §Wizard +
 // sdd_03 §10-11 (v1.6). Issue #14 — CA-05-01..08 (lado UI): cargos del
 // mes, wizard de 4 pasos, seguimiento del job asíncrono, exports.
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
@@ -603,5 +603,132 @@ describe('Módulo 5 — Liquidaciones (#14)', () => {
     await user.click(await screen.findByRole('link', { name: 'Volver a Liquidaciones' }))
 
     expect(await screen.findByRole('heading', { name: 'Liquidaciones' })).toBeInTheDocument()
+  })
+})
+
+// Issue #78 — PeriodSelector compartido (follow-up de #71): el listado
+// (filtro OPCIONAL con "Todos"), el paso 1 del wizard y los cargos del
+// mes (ambos con tope en el mes actual) dejan el `<input type="month">`
+// nativo y usan el selector unificado de src/shared/components/.
+describe('Issue #78 — selector de período unificado (PeriodSelector)', () => {
+  beforeEach(() => {
+    // Sólo Date: userEvent sigue usando timers reales (mismo patrón que
+    // payments.spec.tsx #71).
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0)) // agosto 2026, hora local
+    setSession(OWNER_SESSION)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+    useSessionStore.setState({ session: null, logoutReason: null, isBootstrapping: true })
+    useSettlementWizard.getState().reset()
+    localStorage.removeItem('adminprop:settlement-wizard')
+  })
+
+  it('CA-78-01 (RF-01): el filtro de período del listado arranca en "Todos los períodos" y elegir un mes agrega ?period=', async () => {
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORDS)
+    vi.mocked(settlementsApi.list).mockResolvedValue({ data: [] })
+
+    renderSettlementsApp('/settlements')
+
+    await waitFor(() => screen.getByText('Sin liquidaciones'))
+    expect(screen.getByTestId('settlements-period-label')).toHaveTextContent(
+      /^Todos los períodos$/,
+    )
+    // Sin período elegido no viaja `period` (comportamiento pre-#78 intacto).
+    expect(settlementsApi.list).toHaveBeenCalledWith({}, expect.anything())
+
+    fireEvent.change(screen.getByLabelText('Elegir período'), { target: { value: '2026-07' } })
+
+    await waitFor(() =>
+      expect(settlementsApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ period: '2026-07' }),
+        expect.anything(),
+      ),
+    )
+    expect(screen.getByTestId('settlements-period-label')).toHaveTextContent(/^Julio 2026$/)
+  })
+
+  it('CA-78-01 (RF-01): el botón "Todos" limpia el filtro opcional de período', async () => {
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORDS)
+    vi.mocked(settlementsApi.list).mockResolvedValue({ data: [] })
+
+    const user = userEvent.setup()
+    renderSettlementsApp('/settlements')
+
+    await waitFor(() => screen.getByText('Sin liquidaciones'))
+    // Desde "Todos", la flecha ◀ navega a partir del mes actual (agosto).
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('settlements-period-label')).toHaveTextContent(/^Julio 2026$/),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Todos' }))
+
+    expect(screen.getByTestId('settlements-period-label')).toHaveTextContent(
+      /^Todos los períodos$/,
+    )
+    // El botón desaparece al no haber filtro que limpiar y ningún request
+    // viajó con un período distinto de undefined/2026-07.
+    expect(screen.queryByRole('button', { name: 'Todos' })).not.toBeInTheDocument()
+    expect(
+      vi.mocked(settlementsApi.list).mock.calls.map((call) => call[0]?.period),
+    ).toEqual([undefined, '2026-07'])
+  })
+
+  it('CA-78-02 (wizard paso 1): arranca en el mes actual, no permite meses futuros y navega con las flechas', async () => {
+    vi.mocked(peopleApi.listLandlords).mockResolvedValue(LANDLORDS)
+    vi.mocked(peopleApi.getLandlord).mockResolvedValue({ data: LANDLORD_DETAIL })
+    vi.mocked(propertiesApi.list).mockResolvedValue(PROPERTIES)
+    vi.mocked(paymentsApi.listRentPeriods).mockResolvedValue({ data: [], meta: {} })
+    vi.mocked(chargesApi.listChargeEntries).mockResolvedValue({ data: [] })
+    vi.mocked(propertiesApi.getWorkOrderHistory).mockResolvedValue({ data: [] })
+
+    const user = userEvent.setup()
+    renderSettlementsApp('/settlements/new')
+
+    await screen.findByText('Paso 1 de 4 — Propietario y período')
+    expect(screen.getByTestId('wizard-period-label')).toHaveTextContent(/^Agosto 2026$/)
+    // Mes actual = tope (spec_module_05 §Validaciones: período no futuro).
+    expect(screen.getByRole('button', { name: 'Mes siguiente' })).toBeDisabled()
+
+    // El input tampoco acepta un mes futuro (max = mes actual).
+    fireEvent.change(screen.getByLabelText('Elegir período'), { target: { value: '2026-09' } })
+    expect(screen.getByTestId('wizard-period-label')).toHaveTextContent(/^Agosto 2026$/)
+
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }))
+    expect(screen.getByTestId('wizard-period-label')).toHaveTextContent(/^Julio 2026$/)
+    expect(screen.getByRole('button', { name: 'Mes siguiente' })).toBeEnabled()
+
+    // El período elegido pasa la validación Zod y avanza al paso 2.
+    await screen.findByRole('option', { name: 'Juan Pérez' })
+    await user.selectOptions(screen.getByLabelText('Propietario'), 'l-1')
+    await user.click(screen.getByRole('button', { name: 'Continuar' }))
+
+    await screen.findByText('Paso 2 de 4 — Revisión previa')
+  })
+
+  it('CA-78-03 (RF-05): cargos del mes navega con las flechas, recarga el checklist y no permite meses futuros', async () => {
+    vi.mocked(chargesApi.listChargeEntries).mockResolvedValue(CHARGE_VERIFICATION_ITEMS)
+    vi.mocked(propertiesApi.list).mockResolvedValue(PROPERTIES)
+
+    const user = userEvent.setup()
+    renderSettlementsApp('/settlements/charges')
+
+    await screen.findByTestId('charge-verification-checklist')
+    expect(screen.getByTestId('charges-period-label')).toHaveTextContent(/^Agosto 2026$/)
+    expect(vi.mocked(chargesApi.listChargeEntries).mock.calls[0]?.[0]).toBe('2026-08')
+    // Los cargos son del mes actual hacia atrás — nunca futuros.
+    expect(screen.getByRole('button', { name: 'Mes siguiente' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }))
+
+    await waitFor(() => {
+      const calls = vi.mocked(chargesApi.listChargeEntries).mock.calls
+      expect(calls[calls.length - 1]?.[0]).toBe('2026-07')
+    })
+    expect(screen.getByTestId('charges-period-label')).toHaveTextContent(/^Julio 2026$/)
   })
 })

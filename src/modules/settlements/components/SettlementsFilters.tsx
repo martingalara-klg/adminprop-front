@@ -1,10 +1,13 @@
 // src/modules/settlements/components/SettlementsFilters.tsx
 //
 // RF-01: filtros del listado — período, propietario, estado. Mismo
-// patrón que payments/components/DebtFilters.tsx.
+// patrón que payments/components/DebtFilters.tsx. Issue #78: el período
+// usa el `PeriodSelector` compartido; como acá el período es un filtro
+// OPCIONAL (sin período = todas las liquidaciones), `onClear` agrega el
+// botón "Todos" que limpia el filtro (`period: undefined`).
 import type { LandlordSummary } from '@/api/people.api'
 import type { SettlementListFilters } from '@/api/settlements.api'
-import { Input, Label } from '@/shared/components'
+import { Label, PeriodSelector } from '@/shared/components'
 import { SETTLEMENT_STATUS_OPTIONS, SETTLEMENT_STATUS_LABELS } from '../schemas/settlement.schema'
 
 const SELECT_CLASS =
@@ -19,16 +22,12 @@ type Props = {
 export function SettlementsFilters({ value, landlords, onChange }: Props) {
   return (
     <div className="flex flex-wrap items-end gap-4">
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="settlements-period">Período</Label>
-        <Input
-          id="settlements-period"
-          type="month"
-          value={value.period ?? ''}
-          onChange={(event) => onChange({ period: event.target.value || undefined })}
-          className="max-w-[160px]"
-        />
-      </div>
+      <PeriodSelector
+        id="settlements-period"
+        value={value.period ?? ''}
+        onChange={(period) => onChange({ period })}
+        onClear={() => onChange({ period: undefined })}
+      />
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="settlements-landlord">Propietario</Label>
