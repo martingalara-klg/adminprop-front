@@ -11,6 +11,14 @@
 // acciones (RN-D04 — "el cobro queda visible con marca de anulado").
 // El motivo de la anulación no viaja en `payments[]` — vive en
 // auditoría (`GET /audit-logs`), fuera de alcance de este issue.
+//
+// Cobros de carga inicial (`origin === 'initial_load'`, issue #72 —
+// espejo de back#119, RN-08/RN-P09, CA-04-13/14/15): badge
+// "Automático · alta de contrato en curso" y sin acciones de
+// recibo/anular — el backend las rechaza con 422 BUSINESS_RULE_VIOLATION
+// (registro histórico de la carga inicial, no una operación corriente).
+// Mismo patrón que la fila anulada (ocultar acciones) + leyenda de solo
+// lectura explicando por qué (criterio del #69 con propiedades `rented`).
 import { useState } from 'react'
 import { Button } from '@/shared/components'
 import { formatMoney, formatDate } from '@/shared/utils/format'
@@ -33,6 +41,7 @@ export function PaymentHistoryRow({ payment, canVoidPayment }: Props) {
 
   const voidPayment = useVoidPayment()
   const isVoided = !!payment.voided_at
+  const isInitialLoad = payment.origin === 'initial_load'
 
   const method = PAYMENT_METHOD_LABELS[payment.method as 'cash' | 'transfer'] ?? payment.method
   const destination =
@@ -64,6 +73,7 @@ export function PaymentHistoryRow({ payment, canVoidPayment }: Props) {
       className={`border-b last:border-0 align-top ${isVoided ? 'text-muted-foreground' : ''}`}
       data-testid="payment-history-row"
       data-voided={isVoided}
+      data-origin={payment.origin}
     >
       <td className="py-2 pr-4">
         <span className={isVoided ? 'line-through' : ''}>{formatDate(payment.payment_date)}</span>
@@ -78,21 +88,38 @@ export function PaymentHistoryRow({ payment, canVoidPayment }: Props) {
       <td className="py-2 pr-4">{formatMoney(payment.forgiven_interest)}</td>
       <td className="py-2 pr-4">{payment.notes || '—'}</td>
       <td className="py-2 pr-4">
-        {isVoided ? (
-          <span
-            className="inline-flex w-fit rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
-            role="status"
-          >
-            Anulado
-          </span>
-        ) : (
-          <span className="inline-flex w-fit rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-            Activo
-          </span>
-        )}
+        <div className="flex flex-col gap-1">
+          {isVoided ? (
+            <span
+              className="inline-flex w-fit rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
+              role="status"
+            >
+              Anulado
+            </span>
+          ) : (
+            <span className="inline-flex w-fit rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              Activo
+            </span>
+          )}
+          {isInitialLoad ? (
+            <span
+              className="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border"
+              data-testid="payment-initial-load-badge"
+            >
+              Automático · alta de contrato en curso
+            </span>
+          ) : null}
+        </div>
       </td>
       <td className="py-2">
-        {isVoided ? null : (
+        {isVoided ? null : isInitialLoad ? (
+          // CA-04-14/15 (back#119): sin "Descargar recibo" ni "Anular
+          // cobro" — el backend responde 422 BUSINESS_RULE_VIOLATION
+          // sobre un cobro de carga inicial. La UI lo previene.
+          <p className="text-xs text-muted-foreground">
+            Cobro automático de la carga inicial — sin recibo ni anulación.
+          </p>
+        ) : (
           <div className="flex flex-col gap-2">
             <div>
               <Button
