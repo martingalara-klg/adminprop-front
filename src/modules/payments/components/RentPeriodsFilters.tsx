@@ -1,15 +1,13 @@
 // src/modules/payments/components/RentPeriodsFilters.tsx
 //
-// RF-02: selector de período (`?period=YYYY-MM`, ver `PeriodSelector`
-// — issue #71) + filtros de estado, en mora, propiedad, propietario,
-// inquilino. Presentacional puro (props in / eventos out,
-// module-structure.md).
+// RF-02: selector de período (`?period=YYYY-MM`, ver el `PeriodSelector`
+// compartido — issue #71, movido a shared en #78) + filtros de estado,
+// en mora, propiedad, propietario, inquilino. Presentacional puro
+// (props in / eventos out, module-structure.md).
 import type { PropertySummary } from '@/api/properties.api'
 import type { LandlordSummary, RenterDetail } from '@/api/people.api'
-import { Label } from '@/shared/components'
+import { Label, PeriodSelector } from '@/shared/components'
 import type { RentPeriodListFilters } from '@/api/payments.api'
-
-import { PeriodSelector } from './PeriodSelector'
 
 type Props = {
   /** `period` siempre presente: el panel es "del mes" (RF-02). */

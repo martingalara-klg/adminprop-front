@@ -6,7 +6,8 @@
 // Permisos" no declara `charge:read` separado — ver charges/router.py).
 import { useState } from 'react'
 import { usePermission } from '@/shared/auth/usePermission'
-import { Spinner, ErrorState, ForbiddenState } from '@/shared/components'
+import { Spinner, ErrorState, ForbiddenState, PeriodSelector } from '@/shared/components'
+import { currentPeriod } from '@/shared/utils/period'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
 import type { ChargeEntryCreate, ChargeEntryUpdate } from '@/api/charges.api'
 import type { ChargeEntryInput } from '../schemas/settlement.schema'
@@ -16,10 +17,6 @@ import { useChargeVerification } from '../hooks/useChargeVerification'
 import { useCreateChargeEntry } from '../hooks/useCreateChargeEntry'
 import { useUpdateChargeEntry } from '../hooks/useUpdateChargeEntry'
 import { usePropertyOptions } from '../hooks/usePropertyOptions'
-
-function currentPeriod(): string {
-  return new Date().toISOString().slice(0, 7)
-}
 
 export function ChargesMonthPage() {
   const canManageCharges = usePermission('charge:manage')
@@ -71,19 +68,15 @@ export function ChargesMonthPage() {
             Checklist mensual: qué propiedades ya tienen sus cargos cargados y cuáles faltan.
           </p>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="charges-period" className="text-sm text-muted-foreground">
-            Período
-          </label>
-          <input
-            id="charges-period"
-            type="month"
-            className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            value={period}
-            max={currentPeriod()}
-            onChange={(event) => setPeriod(event.target.value)}
-          />
-        </div>
+        {/* Issue #78: PeriodSelector compartido. Los cargos son de meses ya
+            transcurridos o el actual — nunca futuros (mismo tope `max` que
+            tenía el input nativo). */}
+        <PeriodSelector
+          id="charges-period"
+          value={period}
+          onChange={setPeriod}
+          max={currentPeriod()}
+        />
       </header>
 
       {checklistQuery.isLoading || propertiesQuery.isLoading ? (
