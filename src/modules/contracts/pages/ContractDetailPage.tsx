@@ -34,6 +34,23 @@ import { useContractRenterLink } from '../hooks/useContractRenterLink'
 
 const CURRENCY_LABELS: Record<string, string> = { ARS: 'ARS', USD: 'USD' }
 
+// Issue #84: cuando el índice es "otro", las notas que lo describen
+// (`adjustment_index_notes`, obligatorias en el alta — RN §Validaciones)
+// se muestran junto al label: "Otro — <notas>". Sin notas (dato legacy
+// o índice estándar), sólo el label.
+function formatAdjustmentIndex(
+  adjustmentIndex: string | null,
+  adjustmentIndexNotes: string | null,
+): string {
+  if (!adjustmentIndex) return 'Sin índice (USD o no configurado)'
+  const label =
+    (ADJUSTMENT_INDEX_LABELS as Record<string, string>)[adjustmentIndex] ?? adjustmentIndex
+  if (adjustmentIndex === 'otro' && adjustmentIndexNotes) {
+    return `${label} — ${adjustmentIndexNotes}`
+  }
+  return label
+}
+
 export function ContractDetailPage() {
   const { contractId } = useParams<{ contractId: string }>()
   const canReadContracts = usePermission('contract:read')
@@ -174,10 +191,7 @@ export function ContractDetailPage() {
           <div>
             <dt className="text-muted-foreground">Índice de referencia</dt>
             <dd>
-              {contract.adjustment_index
-                ? ((ADJUSTMENT_INDEX_LABELS as Record<string, string>)[contract.adjustment_index] ??
-                  contract.adjustment_index)
-                : 'Sin índice (USD o no configurado)'}
+              {formatAdjustmentIndex(contract.adjustment_index, contract.adjustment_index_notes)}
             </dd>
           </div>
           <div className="col-span-2">

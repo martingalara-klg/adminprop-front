@@ -1612,4 +1612,88 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
     expect(await screen.findByRole('button', { name: 'Nuevo contrato' })).toBeInTheDocument()
   })
+
+  // ── Issue #84 (ronda feedback back#4 del PO) — pulido de contratos ──────
+  describe('Issue #84 — notas del índice "otro" en la ficha + frecuencia sólo numérica', () => {
+    it('CA-84-01: la ficha muestra "Otro — <notas>" cuando el índice es otro y hay notas', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({
+        data: {
+          ...ACTIVE_CONTRACT,
+          adjustment_index: 'otro',
+          adjustment_index_notes: 'Índice acordado con el propietario',
+        },
+      })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+
+      const detail = await screen.findByTestId('contract-detail')
+      expect(detail).toHaveTextContent('Otro — Índice acordado con el propietario')
+    })
+
+    it('CA-84-02: la ficha muestra sólo "Otro" cuando el índice es otro sin notas', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({
+        data: { ...ACTIVE_CONTRACT, adjustment_index: 'otro', adjustment_index_notes: null },
+      })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+
+      const detail = await screen.findByTestId('contract-detail')
+      expect(detail).toHaveTextContent('Otro')
+      expect(detail).not.toHaveTextContent('Otro —')
+    })
+
+    it('CA-84-03: el input de frecuencia de ajuste rechaza letras al tipear y acepta números', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      const frequency = screen.getByLabelText('Frecuencia de ajuste (meses)')
+      expect(frequency).toHaveAttribute('inputmode', 'numeric')
+
+      // Las letras intercaladas no entran; los dígitos sí.
+      await user.type(frequency, 'a6b3c')
+      expect(frequency).toHaveValue('63')
+
+      await user.clear(frequency)
+      await user.type(frequency, 'abc')
+      expect(frequency).toHaveValue('')
+    })
+
+    it('CA-84-04: el input de frecuencia de ajuste filtra los caracteres no numéricos al pegar', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      const frequency = screen.getByLabelText('Frecuencia de ajuste (meses)')
+
+      // Pegado mixto: sólo entran los dígitos.
+      await user.click(frequency)
+      await user.paste('1a2b')
+      expect(frequency).toHaveValue('12')
+
+      // Pegado sin dígitos: no entra nada.
+      await user.clear(frequency)
+      await user.paste('meses')
+      expect(frequency).toHaveValue('')
+
+      // Pegado 100% numérico: entra tal cual.
+      await user.clear(frequency)
+      await user.paste('6')
+      expect(frequency).toHaveValue('6')
+    })
+  })
 })
