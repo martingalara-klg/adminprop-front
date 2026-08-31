@@ -8,9 +8,16 @@
 // del resto — `pct_applied` viene `null` y `notes` prefijado
 // `"Carga inicial:"`. Se presenta con una etiqueta propia, nunca como un
 // "%" vacío/genérico, para no confundirlo con un ajuste manual normal.
+//
+// Issue #70 (espejo de back#118, decisión #127, feedback #3 del PO):
+// - "Aplicado por" muestra `applied_by_name` (full_name resuelto por el
+//   backend), nunca el UUID crudo de `applied_by`.
+// - La columna % muestra `pct_effective` (recalculado por el backend)
+//   para TODAS las filas aplicadas, incluida la de "Carga inicial" — la
+//   etiqueta se mantiene como marca de origen, además del %.
 import { EmptyState } from '@/shared/components'
 import type { AdjustmentSummary } from '@/api/contracts.api'
-import { formatDate, formatMoney } from '@/shared/utils/format'
+import { formatDate, formatMoney, formatPercent } from '@/shared/utils/format'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -57,18 +64,19 @@ export function ContractAdjustmentsHistory({ adjustments }: Props) {
               <td className="py-2">{formatDate(adjustment.due_period)}</td>
               <td className="py-2">{STATUS_LABELS[adjustment.status] ?? adjustment.status}</td>
               <td className="py-2">
-                {isInitialLoad ? (
-                  <span
-                    className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                    data-testid={`initial-load-badge-${adjustment.id}`}
-                  >
-                    Carga inicial
-                  </span>
-                ) : adjustment.pct_applied ? (
-                  `${adjustment.pct_applied}%`
-                ) : (
-                  '—'
-                )}
+                <span className="inline-flex items-center gap-2">
+                  {adjustment.pct_effective !== null
+                    ? formatPercent(adjustment.pct_effective)
+                    : '—'}
+                  {isInitialLoad ? (
+                    <span
+                      className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                      data-testid={`initial-load-badge-${adjustment.id}`}
+                    >
+                      Carga inicial
+                    </span>
+                  ) : null}
+                </span>
               </td>
               <td className="py-2">
                 {adjustment.previous_amount ? formatMoney(adjustment.previous_amount) : '—'}
@@ -76,7 +84,7 @@ export function ContractAdjustmentsHistory({ adjustments }: Props) {
               <td className="py-2">
                 {adjustment.new_amount ? formatMoney(adjustment.new_amount) : '—'}
               </td>
-              <td className="py-2">{adjustment.applied_by ?? '—'}</td>
+              <td className="py-2">{adjustment.applied_by_name ?? '—'}</td>
             </tr>
           )
         })}
