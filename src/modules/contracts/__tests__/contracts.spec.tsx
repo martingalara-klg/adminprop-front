@@ -9,7 +9,7 @@
 // elegibles, frecuencia antes de "en curso", detección automática por
 // mes de inicio, labels "Valor locativo (mes – mes)".
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
@@ -175,6 +175,11 @@ const DRAFT_CONTRACT_ARS = {
   adjustment_index_notes: null,
   status: 'draft',
   notes: null,
+  // Issue #85 (back#123, sdd_03 v1.16 §8): denormalizados de solo
+  // lectura resueltos por el backend.
+  property_address: 'Av. Colón 1234',
+  property_neighborhood: null,
+  renter_name: 'María López',
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   monthly_amounts: MONTHLY_AMOUNTS,
@@ -1694,6 +1699,120 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await user.clear(frequency)
       await user.paste('6')
       expect(frequency).toHaveValue('6')
+    })
+  })
+
+  // Issue #85 — feedback #4 del PO (espejo de back#123, sdd_03 v1.16 §8) ──
+  describe('Issue #85 — listado agrupado por barrio con dirección e inquilino', () => {
+    const CONTRACT_ALBERDI = {
+      ...ACTIVE_CONTRACT,
+      id: 'c-alberdi',
+      property_address: 'Av. Colón 1234',
+      property_neighborhood: 'Alberdi',
+      renter_name: 'María López',
+    }
+    const CONTRACT_CENTRO = {
+      ...ACTIVE_CONTRACT,
+      id: 'c-centro',
+      property_address: 'San Martín 45',
+      property_neighborhood: 'Centro',
+      renter_name: 'Carlos Gómez',
+    }
+    const CONTRACT_SIN_BARRIO = {
+      ...ACTIVE_CONTRACT,
+      id: 'c-sin-barrio',
+      property_address: 'Ruta 20 km 5',
+      property_neighborhood: null,
+      renter_name: 'Pedro Núñez',
+    }
+
+    function neighborhoodHeadings() {
+      return screen
+        .getAllByTestId('contracts-neighborhood-heading')
+        .map((heading) => heading.textContent)
+    }
+
+    it('CA-85-01: agrupa por barrio en orden alfabético con "Sin barrio" al final', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      // Orden de la API deliberadamente mezclado — el agrupado ordena.
+      vi.mocked(contractsApi.list).mockResolvedValue({
+        data: [CONTRACT_SIN_BARRIO, CONTRACT_CENTRO, CONTRACT_ALBERDI],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts')
+
+      await screen.findByTestId('contracts-table')
+      expect(neighborhoodHeadings()).toEqual(['Alberdi', 'Centro', 'Sin barrio'])
+    })
+
+    it('CA-85-02: cada fila muestra la dirección y el inquilino dentro de su grupo, sin fetches extra', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({
+        data: [CONTRACT_SIN_BARRIO, CONTRACT_CENTRO, CONTRACT_ALBERDI],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts')
+
+      await screen.findByTestId('contracts-table')
+      const groups = screen.getAllByTestId('contracts-neighborhood-group')
+
+      // Alberdi
+      expect(within(groups[0]!).getByText('Av. Colón 1234')).toBeInTheDocument()
+      expect(within(groups[0]!).getByText('María López')).toBeInTheDocument()
+      // Centro
+      expect(within(groups[1]!).getByText('San Martín 45')).toBeInTheDocument()
+      expect(within(groups[1]!).getByText('Carlos Gómez')).toBeInTheDocument()
+      // Sin barrio
+      expect(within(groups[2]!).getByText('Ruta 20 km 5')).toBeInTheDocument()
+      expect(within(groups[2]!).getByText('Pedro Núñez')).toBeInTheDocument()
+
+      // Los nombres vienen denormalizados en el ContractSummary — el
+      // listado NO resuelve referencias con requests extra del cliente.
+      expect(propertiesApi.get).not.toHaveBeenCalled()
+      expect(peopleApi.getRenter).not.toHaveBeenCalled()
+    })
+
+    it('CA-85-03: el filtro de vencimientos sigue funcionando sobre el listado agrupado', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list)
+        .mockResolvedValueOnce({
+          data: [CONTRACT_SIN_BARRIO, CONTRACT_CENTRO, CONTRACT_ALBERDI],
+          meta: {},
+        })
+        .mockResolvedValue({ data: [CONTRACT_CENTRO], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await screen.findByTestId('contracts-table')
+      await user.type(screen.getByLabelText('Vencen dentro de (días)'), '60')
+
+      await waitFor(() => {
+        expect(contractsApi.list).toHaveBeenCalledWith(
+          expect.objectContaining({ expiring_in_days: 60 }),
+          expect.anything(),
+        )
+      })
+      await waitFor(() => {
+        expect(neighborhoodHeadings()).toEqual(['Centro'])
+      })
+      expect(screen.getByText('San Martín 45')).toBeInTheDocument()
+    })
+
+    it('CA-85-04: con contratos sin barrio únicamente, el único grupo es "Sin barrio"', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [CONTRACT_SIN_BARRIO], meta: {} })
+
+      renderContractsApp('/contracts')
+
+      await screen.findByTestId('contracts-table')
+      expect(neighborhoodHeadings()).toEqual(['Sin barrio'])
     })
   })
 })

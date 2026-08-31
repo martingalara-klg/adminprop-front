@@ -225,6 +225,11 @@ const ACTIVE_CONTRACT = {
   adjustment_index_notes: null,
   status: 'active',
   notes: null,
+  // Issue #85 (back#123, sdd_03 v1.16 §8): denormalizados de solo
+  // lectura resueltos por el backend.
+  property_address: 'Av. Colón 1234',
+  property_neighborhood: null,
+  renter_name: 'María López',
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 }
