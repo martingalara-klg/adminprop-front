@@ -4,7 +4,9 @@
 // Issue #12 — CA-04-03..12 (lado UI; CA-04-01/02 son del job de
 // generación mensual, sin superficie de UI). Issue #33 — CA-33-01..05:
 // historial de cobros del período (`payments[]`, incluye anulados) con
-// recibo/anulación por fila.
+// recibo/anulación por fila. Issue #72 (espejo de back#119) —
+// CA-04-13/14/15: cobros `origin = initial_load` con badge "Automático ·
+// alta de contrato en curso" y sin acciones de recibo/anular.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -396,6 +398,95 @@ describe('Módulo 4 — Cobranzas (#12)', () => {
     expect(
       within(voidedRow).queryByRole('button', { name: 'Anular cobro' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('CA-04-13: un cobro initial_load muestra el badge "Automático · alta de contrato en curso"; los manuales no (issue #72, back#119)', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: {
+        ...RENT_PERIOD_PENDING,
+        payments: [
+          { ...PAYMENT_FIXTURE, id: 'pay-manual' },
+          {
+            ...PAYMENT_FIXTURE,
+            id: 'pay-initial',
+            origin: 'initial_load',
+            suggested_interest: '0.00',
+            charged_interest: '0.00',
+          },
+        ],
+      },
+    })
+    vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
+      rent_period_id: 'rp-1',
+      payment_date: '2026-07-15',
+      balance: '100000.00',
+      days_late: 5,
+      suggested_interest: '500.00',
+    })
+
+    renderPaymentsApp('/payments/rp-1')
+
+    const rows = await screen.findAllByTestId('payment-history-row')
+    expect(rows).toHaveLength(2)
+
+    const manualRow = rows[0]!
+    const initialLoadRow = rows[1]!
+
+    expect(manualRow).toHaveAttribute('data-origin', 'manual')
+    expect(
+      within(manualRow).queryByTestId('payment-initial-load-badge'),
+    ).not.toBeInTheDocument()
+
+    expect(initialLoadRow).toHaveAttribute('data-origin', 'initial_load')
+    expect(within(initialLoadRow).getByTestId('payment-initial-load-badge')).toHaveTextContent(
+      'Automático · alta de contrato en curso',
+    )
+  })
+
+  it('CA-04-14/CA-04-15: un cobro initial_load no ofrece recibo ni anulación; un manual sí (issue #72, back#119)', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(paymentsApi.getRentPeriod).mockResolvedValue({
+      data: {
+        ...RENT_PERIOD_PENDING,
+        payments: [
+          { ...PAYMENT_FIXTURE, id: 'pay-manual' },
+          { ...PAYMENT_FIXTURE, id: 'pay-initial', origin: 'initial_load' },
+        ],
+      },
+    })
+    vi.mocked(paymentsApi.interestPreview).mockResolvedValue({
+      rent_period_id: 'rp-1',
+      payment_date: '2026-07-15',
+      balance: '100000.00',
+      days_late: 5,
+      suggested_interest: '500.00',
+    })
+
+    renderPaymentsApp('/payments/rp-1')
+
+    const rows = await screen.findAllByTestId('payment-history-row')
+    expect(rows).toHaveLength(2)
+
+    const manualRow = rows[0]!
+    const initialLoadRow = rows[1]!
+
+    // Cobro manual: ambas acciones disponibles (sesión con payment:void).
+    expect(within(manualRow).getByRole('button', { name: 'Descargar recibo' })).toBeInTheDocument()
+    expect(within(manualRow).getByRole('button', { name: 'Anular cobro' })).toBeInTheDocument()
+
+    // Cobro initial_load: sin acciones — el backend respondería 422
+    // BUSINESS_RULE_VIOLATION (RN-08/RN-P09); la UI lo previene con
+    // una leyenda de solo lectura.
+    expect(
+      within(initialLoadRow).queryByRole('button', { name: 'Descargar recibo' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(initialLoadRow).queryByRole('button', { name: 'Anular cobro' }),
+    ).not.toBeInTheDocument()
+    expect(initialLoadRow).toHaveTextContent(
+      'Cobro automático de la carga inicial — sin recibo ni anulación.',
+    )
   })
 
   it('CA-33-03: se puede descargar el recibo de un cobro activo desde su fila del historial', async () => {
