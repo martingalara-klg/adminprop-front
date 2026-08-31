@@ -2345,6 +2345,12 @@ export interface components {
             status: string;
             /** Notes */
             notes: string | null;
+            /** Property Address */
+            property_address: string;
+            /** Property Neighborhood */
+            property_neighborhood: string | null;
+            /** Renter Name */
+            renter_name: string;
             /**
              * Created At
              * Format: date-time
@@ -2378,6 +2384,14 @@ export interface components {
         /**
          * ContractSummary
          * @description Item de GET /v1/contracts y respuesta de POST/PATCH/activate/terminate.
+         *
+         *     RN-12 (issue #123, `sdd_03` v1.16 §8): `property_address`/
+         *     `property_neighborhood`/`renter_name` son denormalizados de SOLO
+         *     LECTURA, resueltos por JOIN en el repository (nunca persistidos en
+         *     `contracts` ni aceptados en un body -- `ContractCreate`/
+         *     `ContractUpdate` los rechazan via `extra="forbid"`, CA-03-35).
+         *     `property_neighborhood` es `null` si la propiedad no tiene barrio
+         *     asignado (CA-03-32).
          */
         ContractSummary: {
             /**
@@ -2423,6 +2437,12 @@ export interface components {
             status: string;
             /** Notes */
             notes: string | null;
+            /** Property Address */
+            property_address: string;
+            /** Property Neighborhood */
+            property_neighborhood: string | null;
+            /** Renter Name */
+            renter_name: string;
             /**
              * Created At
              * Format: date-time
