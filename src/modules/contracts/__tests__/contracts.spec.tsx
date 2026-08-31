@@ -654,7 +654,8 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
 
       expect(await screen.findByTestId('contract-in-progress-section')).toBeInTheDocument()
-      expect(screen.getByText('Contrato en curso desde enero 2026')).toBeInTheDocument()
+      // Issue #78: mes capitalizado, unificado con formatPeriodLabel.
+      expect(screen.getByText('Contrato en curso desde Enero 2026')).toBeInTheDocument()
       expect(screen.getByLabelText('Monto vigente hoy')).toBeInTheDocument()
       expect(screen.getByLabelText('Desde cuándo rige')).toBeInTheDocument()
       // ARS sin frecuencia: la sección pide completar la frecuencia primero.
@@ -990,7 +991,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
       await fillArsContract(user, { startDate: '2027-01-15', frequency: '6' })
 
-      expect(await screen.findByText('Contrato en curso desde enero 2027')).toBeInTheDocument()
+      expect(await screen.findByText('Contrato en curso desde Enero 2027')).toBeInTheDocument()
       expect(
         screen.getByText(/Sin aumentos transcurridos: el monto inicial sigue vigente/),
       ).toBeInTheDocument()
@@ -1288,7 +1289,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await screen.findByRole('option', { name: 'Av. Colón 1234' })
       await user.type(screen.getByLabelText('Fecha de inicio'), '2026-07-01')
 
-      expect(await screen.findByText('Contrato en curso desde julio 2026')).toBeInTheDocument()
+      expect(await screen.findByText('Contrato en curso desde Julio 2026')).toBeInTheDocument()
       expect(
         screen.getByText(/Completá primero la frecuencia de ajuste para calcular los aumentos/),
       ).toBeInTheDocument()
@@ -1310,7 +1311,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
         endDate: '2028-06-30',
       })
 
-      expect(await screen.findByText('Contrato en curso desde julio 2026')).toBeInTheDocument()
+      expect(await screen.findByText('Contrato en curso desde Julio 2026')).toBeInTheDocument()
       expect(
         screen.getByText(
           /Sin aumentos transcurridos: el monto inicial sigue vigente\. Los meses ya transcurridos se registran automáticamente como cobrados/,
