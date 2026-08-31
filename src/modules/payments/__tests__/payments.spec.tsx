@@ -146,6 +146,9 @@ const PAYMENT_FIXTURE: PaymentDetail = {
   notes: null,
   created_by: 'u-owner',
   created_at: '2026-07-15T00:00:00Z',
+  // back#119: origin distingue cobros manuales de los retroactivos de
+  // carga inicial — requerido por el tipo regenerado (sdd_03 v1.14).
+  origin: 'manual',
   voided_at: null,
   voided_by: null,
 }
