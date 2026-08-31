@@ -387,7 +387,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -418,7 +420,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -437,7 +441,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
         new_amount: '110000.00',
         notes: null,
         applied_by: 'owner@inmobiliaria-sur.com',
+        applied_by_name: 'Owner Uno',
         applied_at: '2026-07-02T00:00:00Z',
+        pct_effective: '10.00',
         created_at: '2026-07-01T00:00:00Z',
         updated_at: '2026-07-02T00:00:00Z',
       },
@@ -472,7 +478,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -516,7 +524,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -569,7 +579,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
           new_amount: null,
           notes: null,
           applied_by: null,
+          applied_by_name: null,
           applied_at: null,
+          pct_effective: null,
           created_at: '2026-07-01T00:00:00Z',
           updated_at: '2026-07-01T00:00:00Z',
         },
@@ -831,7 +843,9 @@ describe('Módulo 3 — Contratos (#11)', () => {
             new_amount: '130000.00',
             notes: 'Carga inicial: alta de contrato en curso',
             applied_by: 'owner@inmobiliaria-sur.com',
+            applied_by_name: 'Owner Uno',
             applied_at: '2026-01-01T00:00:00Z',
+            pct_effective: '30.00',
             created_at: '2026-01-01T00:00:00Z',
             updated_at: '2026-01-01T00:00:00Z',
           },
@@ -845,6 +859,82 @@ describe('Módulo 3 — Contratos (#11)', () => {
       expect(screen.getByText('Carga inicial')).toBeInTheDocument()
       expect(screen.getByTestId('initial-load-badge-adj-initial')).toBeInTheDocument()
       expect(screen.queryByText('null%')).not.toBeInTheDocument()
+    })
+
+    // Issue #70 punto 2 (espejo de back#118, decisión #127) ──────────────
+    it('CA-70-04: el historial muestra applied_by_name y pct_effective en filas normales', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({
+        data: [
+          {
+            id: 'adj-manual',
+            contract_id: 'c-1',
+            due_period: '2026-07-01',
+            status: 'applied',
+            pct_applied: '12.50',
+            previous_amount: '100000.00',
+            new_amount: '112500.00',
+            notes: null,
+            applied_by: '5f0c8f3a-1111-2222-3333-444455556666',
+            applied_by_name: 'Owner Uno',
+            applied_at: '2026-07-02T00:00:00Z',
+            pct_effective: '12.50',
+            created_at: '2026-07-01T00:00:00Z',
+            updated_at: '2026-07-02T00:00:00Z',
+          },
+        ],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts/c-1')
+
+      const table = await screen.findByTestId('contract-adjustments-history')
+      // "Aplicado por" = nombre resuelto por el backend, nunca el UUID.
+      expect(table).toHaveTextContent('Owner Uno')
+      expect(table).not.toHaveTextContent('5f0c8f3a-1111-2222-3333-444455556666')
+      // % = pct_effective formateado es-AR.
+      expect(table).toHaveTextContent('12,5%')
+    })
+
+    it('CA-70-05: la fila de "Carga inicial" muestra el % (pct_effective) además de la etiqueta', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({
+        data: [
+          {
+            id: 'adj-initial',
+            contract_id: 'c-1',
+            due_period: '2026-03-01',
+            status: 'applied',
+            pct_applied: null,
+            previous_amount: '100000.00',
+            new_amount: '130000.00',
+            notes: 'Carga inicial: alta de contrato en curso',
+            applied_by: 'a0b1c2d3-9999-8888-7777-666655554444',
+            applied_by_name: 'Owner Uno',
+            applied_at: '2026-01-01T00:00:00Z',
+            pct_effective: '30.00',
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts/c-1')
+
+      const table = await screen.findByTestId('contract-adjustments-history')
+      // La etiqueta se mantiene como marca de origen…
+      expect(screen.getByTestId('initial-load-badge-adj-initial')).toHaveTextContent(
+        'Carga inicial',
+      )
+      // …y ahora convive con el % efectivo calculado por el backend.
+      expect(table).toHaveTextContent('30%')
+      expect(table).toHaveTextContent('Owner Uno')
+      expect(table).not.toHaveTextContent('a0b1c2d3-9999-8888-7777-666655554444')
     })
   })
 
@@ -1390,15 +1480,23 @@ describe('Módulo 3 — Contratos (#11)', () => {
       })
     })
 
-    it('CA-56-05: 422 CONTRACT_HAS_DEBT muestra el detalle de lo adeudado del contrato', async () => {
+    // Issue #70 punto 1: mensaje legible construido desde `details` (nunca
+    // el JSON crudo). Shape real del back (debt_certificate_service.py):
+    // { contract_id, property_id, periods_overdue, balance, days_late,
+    //   suggested_interest }.
+    it('CA-70-01: 422 CONTRACT_HAS_DEBT muestra un mensaje legible con interés sugerido (sin JSON)', async () => {
       setSession(OWNER_SESSION)
       mockDetailLinkDefaults()
       vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
       vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
       vi.mocked(contractsApi.downloadDebtCertificate).mockRejectedValueOnce(
         new AdminPropApiError('CONTRACT_HAS_DEBT', 422, 'El contrato tiene deuda pendiente.', null, {
-          overdue_periods: 2,
-          balance: '200000.00',
+          contract_id: 'c-2',
+          property_id: 'p-2',
+          periods_overdue: 1,
+          balance: '1450000.00',
+          days_late: 19,
+          suggested_interest: '137750.00',
         }),
       )
 
@@ -1409,12 +1507,77 @@ describe('Módulo 3 — Contratos (#11)', () => {
         await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
       )
 
-      await waitFor(() => {
-        expect(screen.getByText('El contrato tiene deuda pendiente.')).toBeInTheDocument()
-      })
-      expect(screen.getByTestId('contract-debt-certificate-details')).toHaveTextContent(
-        'overdue_periods',
+      expect(
+        await screen.findByText(
+          'El contrato tiene deuda pendiente: 1 período adeudado · saldo $1.450.000 · 19 días de mora · interés sugerido $137.750',
+        ),
+      ).toBeInTheDocument()
+      // Nada de bloques de código/JSON en la UI.
+      expect(document.querySelector('pre')).toBeNull()
+      expect(screen.getByTestId('contract-debt-certificate-details')).not.toHaveTextContent(
+        'periods_overdue',
       )
+      expect(screen.getByTestId('contract-debt-certificate-details')).not.toHaveTextContent('{')
+    })
+
+    it('CA-70-02: el mensaje de deuda pluraliza los períodos y omite el interés si el back no lo manda', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.downloadDebtCertificate).mockRejectedValueOnce(
+        new AdminPropApiError('CONTRACT_HAS_DEBT', 422, 'El contrato tiene deuda pendiente.', null, {
+          contract_id: 'c-2',
+          property_id: 'p-2',
+          periods_overdue: 2,
+          balance: '200000.50',
+          days_late: 1,
+        }),
+      )
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
+      )
+
+      // Plural en períodos, singular en días, centavos sólo si son reales.
+      expect(
+        await screen.findByText(
+          'El contrato tiene deuda pendiente: 2 períodos adeudados · saldo $200.000,50 · 1 día de mora',
+        ),
+      ).toBeInTheDocument()
+      expect(screen.getByTestId('contract-debt-certificate-details')).not.toHaveTextContent(
+        'interés sugerido',
+      )
+      expect(document.querySelector('pre')).toBeNull()
+    })
+
+    it('CA-70-03: 422 CONTRACT_HAS_DEBT con details vacío cae a un mensaje genérico legible', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.downloadDebtCertificate).mockRejectedValueOnce(
+        new AdminPropApiError(
+          'CONTRACT_HAS_DEBT',
+          422,
+          'El contrato tiene deuda pendiente.',
+          null,
+          {},
+        ),
+      )
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar certificado de libre deuda' }),
+      )
+
+      expect(await screen.findByText('El contrato tiene deuda pendiente.')).toBeInTheDocument()
+      expect(document.querySelector('pre')).toBeNull()
     })
 
     it('CA-56-06: la ficha muestra el historial de valores locativos mes a mes', async () => {
