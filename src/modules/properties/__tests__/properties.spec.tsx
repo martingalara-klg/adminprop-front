@@ -383,15 +383,29 @@ describe('Módulo 1 — Propiedades (#10)', () => {
     })
   })
 
-  it('CA-01-03: borrar una propiedad con contrato activo devuelve el mensaje de ENTITY_HAS_DEPENDENCIES', async () => {
+  // Issue #86 (back#124, decisión #130, sdd_03 v1.17): el bloqueo por
+  // contrato activo pasa de `409 ENTITY_HAS_DEPENDENCIES` a
+  // `422 ENTITY_HAS_ACTIVE_CONTRACT` con `details.active_contracts[]` —
+  // la UI arma un mensaje legible desde `details`, nunca JSON.
+  it('CA-01-03 (#86): borrar una propiedad con contrato activo muestra el mensaje legible de ENTITY_HAS_ACTIVE_CONTRACT', async () => {
     setSession(OWNER_SESSION)
     mockFichaDefaults()
     vi.mocked(propertiesApi.remove).mockRejectedValueOnce(
-      new AdminPropApiError(
-        'ENTITY_HAS_DEPENDENCIES',
-        409,
-        'No se puede eliminar: hay registros que dependen de este recurso.',
-      ),
+      new AdminPropApiError('ENTITY_HAS_ACTIVE_CONTRACT', 422, 'Entity has active contract', null, {
+        entity_type: 'property',
+        entity_id: 'p-1',
+        active_contracts: [
+          {
+            contract_id: 'c-1',
+            property_id: 'p-1',
+            property_address: 'Av. Siempreviva 742',
+            renter_id: 'r-1',
+            renter_name: 'Juan Pérez',
+            start_date: '2026-01-01',
+            end_date: '2026-12-31',
+          },
+        ],
+      }),
     )
 
     renderPropertiesApp('/properties/p-1')
@@ -402,9 +416,14 @@ describe('Módulo 1 — Propiedades (#10)', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('No se puede eliminar: hay registros que dependen de este recurso.'),
+        screen.getByText(
+          'No se puede eliminar: tiene un contrato activo (Av. Siempreviva 742 — Juan Pérez).',
+        ),
       ).toBeInTheDocument()
     })
+    // Nada de JSON en pantalla (precedente #70).
+    expect(screen.queryByText(/active_contracts/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/entity_type/)).not.toBeInTheDocument()
   })
 
   it('CA-01-03: sin contrato activo, la baja es lógica y la propiedad conserva su historial (soft delete confirmado)', async () => {

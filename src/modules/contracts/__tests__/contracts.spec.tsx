@@ -24,6 +24,7 @@ vi.mock('@/api/contracts.api', () => ({
     update: vi.fn(),
     activate: vi.fn(),
     terminate: vi.fn(),
+    remove: vi.fn(),
     listAdjustments: vi.fn(),
     listPendingAdjustments: vi.fn(),
     applyAdjustment: vi.fn(),
@@ -66,6 +67,15 @@ const OWNER_SESSION = buildSession({
     'renter:read',
   ],
   isSuperAdmin: false,
+})
+
+// Issue #86 (back#124, decisión #130): `contract:delete` es un permiso
+// atómico exclusivo de owner. Variante separada de OWNER_SESSION (mismo
+// criterio que OWNER_SESSION_WITH_SETTLEMENTS en people.spec) para no
+// hacer aparecer el botón "Eliminar contrato" en los tests preexistentes.
+const OWNER_SESSION_WITH_DELETE = buildSession({
+  ...OWNER_SESSION,
+  permissions: [...OWNER_SESSION.permissions, 'contract:delete'],
 })
 
 // Issue #56 punto 4: admin conserva `contract:manage` (activar/editar)
@@ -1813,6 +1823,117 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
       await screen.findByTestId('contracts-table')
       expect(neighborhoodHeadings()).toEqual(['Sin barrio'])
+    })
+  })
+
+  // ── Issue #86 (espejo de back#124, decisión #130) — eliminar contrato ───
+  describe('Issue #86 — eliminar contrato (permiso contract:delete)', () => {
+    it('CA-86-01: sin contract:delete el botón "Eliminar contrato" no existe (owner con terminate y admin con manage)', async () => {
+      // Owner sin contract:delete (tiene terminate/manage): no ve eliminar.
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+      await screen.findByTestId('contract-detail')
+      expect(screen.queryByRole('button', { name: 'Eliminar contrato' })).not.toBeInTheDocument()
+
+      // Admin (contract:manage): tampoco.
+      setSession(ADMIN_SESSION)
+      renderContractsApp('/contracts/c-2')
+      await waitFor(() => {
+        expect(screen.getAllByTestId('contract-detail').length).toBeGreaterThan(1)
+      })
+      expect(screen.queryByRole('button', { name: 'Eliminar contrato' })).not.toBeInTheDocument()
+    })
+
+    it('CA-86-02: con contrato ACTIVO la confirmación fuerte sólo habilita el botón al tipear ELIMINAR', async () => {
+      setSession(OWNER_SESSION_WITH_DELETE)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Eliminar contrato' }))
+
+      // El modal explica las consecuencias antes de habilitar nada.
+      expect(await screen.findByText('Eliminar contrato activo')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          /se detiene la generación de meses futuros; los cobros y liquidaciones ya emitidos se conservan/i,
+        ),
+      ).toBeInTheDocument()
+
+      const confirmButton = screen.getByRole('button', { name: 'Eliminar definitivamente' })
+      expect(confirmButton).toBeDisabled()
+
+      // Palabra incorrecta: sigue deshabilitado.
+      const input = screen.getByLabelText('Para confirmar, escribí ELIMINAR')
+      await user.type(input, 'eliminar')
+      expect(confirmButton).toBeDisabled()
+
+      // Palabra exacta: se habilita.
+      await user.clear(input)
+      await user.type(input, 'ELIMINAR')
+      expect(confirmButton).toBeEnabled()
+
+      // Nada se disparó todavía.
+      expect(contractsApi.remove).not.toHaveBeenCalled()
+    })
+
+    it('CA-86-03: flujo completo — eliminar un contrato activo tipeando ELIMINAR vuelve al listado', async () => {
+      setSession(OWNER_SESSION_WITH_DELETE)
+      mockDetailLinkDefaults()
+      mockOptionDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.remove).mockResolvedValueOnce(undefined)
+      // Tras eliminar, el listado ya no incluye el contrato (el back lo
+      // excluye; acá el mock lo refleja).
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Eliminar contrato' }))
+      await user.type(screen.getByLabelText('Para confirmar, escribí ELIMINAR'), 'ELIMINAR')
+      await user.click(screen.getByRole('button', { name: 'Eliminar definitivamente' }))
+
+      await waitFor(() => {
+        expect(contractsApi.remove).toHaveBeenCalledWith('c-2')
+      })
+      // Volvió al listado de contratos.
+      expect(await screen.findByRole('button', { name: 'Nuevo contrato' })).toBeInTheDocument()
+    })
+
+    it('CA-86-04: un contrato NO activo usa la confirmación de 2 pasos existente (sin tipeo)', async () => {
+      setSession(OWNER_SESSION_WITH_DELETE)
+      mockDetailLinkDefaults()
+      mockOptionDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.remove).mockResolvedValueOnce(undefined)
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-1')
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Eliminar contrato' }))
+
+      // Confirmación de 2 pasos (ConfirmDeleteButton) — sin modal de tipeo.
+      expect(contractsApi.remove).not.toHaveBeenCalled()
+      expect(
+        screen.getByText('¿Eliminar este contrato? La baja es lógica: su historial se conserva.'),
+      ).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+      await waitFor(() => {
+        expect(contractsApi.remove).toHaveBeenCalledWith('c-1')
+      })
     })
   })
 })
