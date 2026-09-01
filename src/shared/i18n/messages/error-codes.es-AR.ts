@@ -27,6 +27,11 @@ export const errorCodeMessages: Record<string, string> = {
   NOT_FOUND: 'No encontramos lo que buscás.',
   CONFLICT: 'Hay un conflicto con el estado actual.',
   ENTITY_HAS_DEPENDENCIES: 'No se puede eliminar: hay registros que dependen de este recurso.',
+  // Issue #86 (back#124, decisión #130, sdd_03 v1.17): DELETE de
+  // propiedad/inquilino con contrato `active`. Este es el fallback
+  // genérico; el mensaje con detalle (dirección — inquilino) se arma
+  // desde `error.details` en `src/shared/utils/activeContractMessage.ts`.
+  ENTITY_HAS_ACTIVE_CONTRACT: 'No se puede eliminar: tiene un contrato activo.',
   BUSINESS_RULE_VIOLATION: 'La operación viola una regla de negocio.',
   INVALID_STATUS_TRANSITION: 'No se puede cambiar el estado desde el estado actual.',
   RATE_LIMIT_EXCEEDED: 'Demasiadas solicitudes. Esperá unos segundos e intentá nuevamente.',
