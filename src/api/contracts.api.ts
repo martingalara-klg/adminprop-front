@@ -13,6 +13,7 @@
 //   PATCH  /contracts/:id                    (solo notes/end_date; montos NUNCA — RN-C04)
 //   POST   /contracts/:id/activate           (draft → active)
 //   POST   /contracts/:id/terminate           (active → terminated; body: { reason }; permiso contract:terminate — issue #105/#56)
+//   DELETE /contracts/:id                     (borrado lógico en cualquier estado; permiso contract:delete — issue #124/#86)
 //   GET    /contracts/:id/adjustments        (historial de ajustes)
 //   GET    /adjustments                      (?status=pending — bandeja)
 //   POST   /adjustments/:id/apply            (body: { pct })
@@ -146,6 +147,17 @@ export const contractsApi = {
       payload,
     )
     return response.data
+  },
+
+  /**
+   * Issue #86 (back#124, decisión #130, sdd_03 v1.17 — RF-07/RN-C08):
+   * borrado LÓGICO en cualquier estado, incluso `active` (la propiedad
+   * vuelve a `available` y se detiene la generación de períodos futuros;
+   * cobros y liquidaciones ya emitidos quedan intactos). `204 No
+   * Content`, sin body. Permiso `contract:delete` (solo owner).
+   */
+  async remove(contractId: string): Promise<void> {
+    await httpClient.delete(`/contracts/${contractId}`)
   },
 
   // ── Libre deuda del contrato (Fetch + Blob, POST) ────────────────────────
