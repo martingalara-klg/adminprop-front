@@ -687,9 +687,9 @@ export interface paths {
         post?: never;
         /**
          * Delete Renter
-         * @description RF-03 + CA-02-06: baja logica. `409 ENTITY_HAS_DEPENDENCIES` si el
-         *     inquilino tiene contrato vigente (chequeo extensible, ver
-         *     `repository.py` -- siempre `False` hoy).
+         * @description RF-03 + CA-02-06/08/09 (issue #124, RN-D05): baja logica auditada
+         *     (`renter.deleted`); con contrato `active` -> `422
+         *     ENTITY_HAS_ACTIVE_CONTRACT` con `details.active_contracts[]`.
          */
         delete: operations["delete_renter_v1_renters__renter_id__delete"];
         options?: never;
@@ -784,9 +784,9 @@ export interface paths {
         post?: never;
         /**
          * Delete Property
-         * @description RF-01 + CA-01-03: baja logica; `409 ENTITY_HAS_DEPENDENCIES` si hay
-         *     contrato activo (chequeo extensible, ver `repository.py` -- siempre
-         *     `False` hoy).
+         * @description RF-01 + CA-01-03/12/13 (issue #124, RN-D05): baja logica auditada
+         *     (`property.deleted`); con contrato `active` -> `422
+         *     ENTITY_HAS_ACTIVE_CONTRACT` con `details.active_contracts[]`.
          */
         delete: operations["delete_property_v1_properties__property_id__delete"];
         options?: never;
@@ -947,7 +947,15 @@ export interface paths {
         get: operations["get_contract_v1_contracts__contract_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Contract
+         * @description RF-07 + CA-03-37/38/39/40: borrado LOGICO en cualquier estado
+         *     (incluso `active`); si estaba activo, la propiedad vuelve a
+         *     `available` y se detiene la generacion de periodos futuros; los
+         *     cobros/liquidaciones ya emitidos quedan intactos. Auditado
+         *     (`contract.deleted`).
+         */
+        delete: operations["delete_contract_v1_contracts__contract_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -2345,6 +2353,12 @@ export interface components {
             status: string;
             /** Notes */
             notes: string | null;
+            /** Property Address */
+            property_address: string;
+            /** Property Neighborhood */
+            property_neighborhood: string | null;
+            /** Renter Name */
+            renter_name: string;
             /**
              * Created At
              * Format: date-time
@@ -2378,6 +2392,14 @@ export interface components {
         /**
          * ContractSummary
          * @description Item de GET /v1/contracts y respuesta de POST/PATCH/activate/terminate.
+         *
+         *     RN-12 (issue #123, `sdd_03` v1.16 §8): `property_address`/
+         *     `property_neighborhood`/`renter_name` son denormalizados de SOLO
+         *     LECTURA, resueltos por JOIN en el repository (nunca persistidos en
+         *     `contracts` ni aceptados en un body -- `ContractCreate`/
+         *     `ContractUpdate` los rechazan via `extra="forbid"`, CA-03-35).
+         *     `property_neighborhood` es `null` si la propiedad no tiene barrio
+         *     asignado (CA-03-32).
          */
         ContractSummary: {
             /**
@@ -2423,6 +2445,12 @@ export interface components {
             status: string;
             /** Notes */
             notes: string | null;
+            /** Property Address */
+            property_address: string;
+            /** Property Neighborhood */
+            property_neighborhood: string | null;
+            /** Renter Name */
+            renter_name: string;
             /**
              * Created At
              * Format: date-time
@@ -6268,6 +6296,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ContractDetailResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_contract_v1_contracts__contract_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

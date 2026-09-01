@@ -1,18 +1,19 @@
 // src/modules/settlements/components/wizard/SelectPeriodStep.tsx
 //
 // Wizard paso 1/4 — select_period: elegir propietario y período.
-import { useForm } from 'react-hook-form'
+// Issue #78: el período usa el `PeriodSelector` compartido (flechas +
+// etiqueta capitalizada) vía Controller de RHF. El wizard sólo admite
+// períodos NO futuros (spec_module_05 §Validaciones) → `max` del mes
+// actual: ▶ se deshabilita al llegar y el input descarta meses futuros.
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Label } from '@/shared/components'
+import { Button, Label, PeriodSelector } from '@/shared/components'
+import { currentPeriod } from '@/shared/utils/period'
 import type { LandlordSummary } from '@/api/people.api'
 import { selectPeriodSchema, type SelectPeriodInput } from '../../schemas/settlement.schema'
 
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
-
-function currentPeriod(): string {
-  return new Date().toISOString().slice(0, 7)
-}
 
 type Props = {
   landlords: LandlordSummary[]
@@ -29,6 +30,7 @@ export function SelectPeriodStep({
 }: Props) {
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<SelectPeriodInput>({
@@ -66,13 +68,17 @@ export function SelectPeriodStep({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="wizard-period">Período</Label>
-        <input
-          id="wizard-period"
-          type="month"
-          className={SELECT_CLASS}
-          max={currentPeriod()}
-          {...register('period')}
+        <Controller
+          control={control}
+          name="period"
+          render={({ field }) => (
+            <PeriodSelector
+              id="wizard-period"
+              value={field.value}
+              onChange={field.onChange}
+              max={currentPeriod()}
+            />
+          )}
         />
         {errors.period ? (
           <p className="text-sm text-destructive" role="alert">

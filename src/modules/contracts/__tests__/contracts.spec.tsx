@@ -9,7 +9,7 @@
 // elegibles, frecuencia antes de "en curso", detección automática por
 // mes de inicio, labels "Valor locativo (mes – mes)".
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildSession, useSessionStore } from '@/shared/auth/session-store'
@@ -24,6 +24,7 @@ vi.mock('@/api/contracts.api', () => ({
     update: vi.fn(),
     activate: vi.fn(),
     terminate: vi.fn(),
+    remove: vi.fn(),
     listAdjustments: vi.fn(),
     listPendingAdjustments: vi.fn(),
     applyAdjustment: vi.fn(),
@@ -66,6 +67,15 @@ const OWNER_SESSION = buildSession({
     'renter:read',
   ],
   isSuperAdmin: false,
+})
+
+// Issue #86 (back#124, decisión #130): `contract:delete` es un permiso
+// atómico exclusivo de owner. Variante separada de OWNER_SESSION (mismo
+// criterio que OWNER_SESSION_WITH_SETTLEMENTS en people.spec) para no
+// hacer aparecer el botón "Eliminar contrato" en los tests preexistentes.
+const OWNER_SESSION_WITH_DELETE = buildSession({
+  ...OWNER_SESSION,
+  permissions: [...OWNER_SESSION.permissions, 'contract:delete'],
 })
 
 // Issue #56 punto 4: admin conserva `contract:manage` (activar/editar)
@@ -175,6 +185,11 @@ const DRAFT_CONTRACT_ARS = {
   adjustment_index_notes: null,
   status: 'draft',
   notes: null,
+  // Issue #85 (back#123, sdd_03 v1.16 §8): denormalizados de solo
+  // lectura resueltos por el backend.
+  property_address: 'Av. Colón 1234',
+  property_neighborhood: null,
+  renter_name: 'María López',
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   monthly_amounts: MONTHLY_AMOUNTS,
@@ -654,7 +669,8 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await user.type(screen.getByLabelText('Fecha de inicio'), '2026-01-01')
 
       expect(await screen.findByTestId('contract-in-progress-section')).toBeInTheDocument()
-      expect(screen.getByText('Contrato en curso desde enero 2026')).toBeInTheDocument()
+      // Issue #78: mes capitalizado, unificado con formatPeriodLabel.
+      expect(screen.getByText('Contrato en curso desde Enero 2026')).toBeInTheDocument()
       expect(screen.getByLabelText('Monto vigente hoy')).toBeInTheDocument()
       expect(screen.getByLabelText('Desde cuándo rige')).toBeInTheDocument()
       // ARS sin frecuencia: la sección pide completar la frecuencia primero.
@@ -990,7 +1006,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
 
       await fillArsContract(user, { startDate: '2027-01-15', frequency: '6' })
 
-      expect(await screen.findByText('Contrato en curso desde enero 2027')).toBeInTheDocument()
+      expect(await screen.findByText('Contrato en curso desde Enero 2027')).toBeInTheDocument()
       expect(
         screen.getByText(/Sin aumentos transcurridos: el monto inicial sigue vigente/),
       ).toBeInTheDocument()
@@ -1288,7 +1304,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
       await screen.findByRole('option', { name: 'Av. Colón 1234' })
       await user.type(screen.getByLabelText('Fecha de inicio'), '2026-07-01')
 
-      expect(await screen.findByText('Contrato en curso desde julio 2026')).toBeInTheDocument()
+      expect(await screen.findByText('Contrato en curso desde Julio 2026')).toBeInTheDocument()
       expect(
         screen.getByText(/Completá primero la frecuencia de ajuste para calcular los aumentos/),
       ).toBeInTheDocument()
@@ -1310,7 +1326,7 @@ describe('Módulo 3 — Contratos (#11)', () => {
         endDate: '2028-06-30',
       })
 
-      expect(await screen.findByText('Contrato en curso desde julio 2026')).toBeInTheDocument()
+      expect(await screen.findByText('Contrato en curso desde Julio 2026')).toBeInTheDocument()
       expect(
         screen.getByText(
           /Sin aumentos transcurridos: el monto inicial sigue vigente\. Los meses ya transcurridos se registran automáticamente como cobrados/,
@@ -1610,5 +1626,314 @@ describe('Módulo 3 — Contratos (#11)', () => {
     await user.click(await screen.findByRole('link', { name: 'Volver a Contratos' }))
 
     expect(await screen.findByRole('button', { name: 'Nuevo contrato' })).toBeInTheDocument()
+  })
+
+  // ── Issue #84 (ronda feedback back#4 del PO) — pulido de contratos ──────
+  describe('Issue #84 — notas del índice "otro" en la ficha + frecuencia sólo numérica', () => {
+    it('CA-84-01: la ficha muestra "Otro — <notas>" cuando el índice es otro y hay notas', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({
+        data: {
+          ...ACTIVE_CONTRACT,
+          adjustment_index: 'otro',
+          adjustment_index_notes: 'Índice acordado con el propietario',
+        },
+      })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+
+      const detail = await screen.findByTestId('contract-detail')
+      expect(detail).toHaveTextContent('Otro — Índice acordado con el propietario')
+    })
+
+    it('CA-84-02: la ficha muestra sólo "Otro" cuando el índice es otro sin notas', async () => {
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({
+        data: { ...ACTIVE_CONTRACT, adjustment_index: 'otro', adjustment_index_notes: null },
+      })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+
+      const detail = await screen.findByTestId('contract-detail')
+      expect(detail).toHaveTextContent('Otro')
+      expect(detail).not.toHaveTextContent('Otro —')
+    })
+
+    it('CA-84-03: el input de frecuencia de ajuste rechaza letras al tipear y acepta números', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      const frequency = screen.getByLabelText('Frecuencia de ajuste (meses)')
+      expect(frequency).toHaveAttribute('inputmode', 'numeric')
+
+      // Las letras intercaladas no entran; los dígitos sí.
+      await user.type(frequency, 'a6b3c')
+      expect(frequency).toHaveValue('63')
+
+      await user.clear(frequency)
+      await user.type(frequency, 'abc')
+      expect(frequency).toHaveValue('')
+    })
+
+    it('CA-84-04: el input de frecuencia de ajuste filtra los caracteres no numéricos al pegar', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await openCreateContractModal(user)
+      const frequency = screen.getByLabelText('Frecuencia de ajuste (meses)')
+
+      // Pegado mixto: sólo entran los dígitos.
+      await user.click(frequency)
+      await user.paste('1a2b')
+      expect(frequency).toHaveValue('12')
+
+      // Pegado sin dígitos: no entra nada.
+      await user.clear(frequency)
+      await user.paste('meses')
+      expect(frequency).toHaveValue('')
+
+      // Pegado 100% numérico: entra tal cual.
+      await user.clear(frequency)
+      await user.paste('6')
+      expect(frequency).toHaveValue('6')
+    })
+  })
+
+  // Issue #85 — feedback #4 del PO (espejo de back#123, sdd_03 v1.16 §8) ──
+  describe('Issue #85 — listado agrupado por barrio con dirección e inquilino', () => {
+    const CONTRACT_ALBERDI = {
+      ...ACTIVE_CONTRACT,
+      id: 'c-alberdi',
+      property_address: 'Av. Colón 1234',
+      property_neighborhood: 'Alberdi',
+      renter_name: 'María López',
+    }
+    const CONTRACT_CENTRO = {
+      ...ACTIVE_CONTRACT,
+      id: 'c-centro',
+      property_address: 'San Martín 45',
+      property_neighborhood: 'Centro',
+      renter_name: 'Carlos Gómez',
+    }
+    const CONTRACT_SIN_BARRIO = {
+      ...ACTIVE_CONTRACT,
+      id: 'c-sin-barrio',
+      property_address: 'Ruta 20 km 5',
+      property_neighborhood: null,
+      renter_name: 'Pedro Núñez',
+    }
+
+    function neighborhoodHeadings() {
+      return screen
+        .getAllByTestId('contracts-neighborhood-heading')
+        .map((heading) => heading.textContent)
+    }
+
+    it('CA-85-01: agrupa por barrio en orden alfabético con "Sin barrio" al final', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      // Orden de la API deliberadamente mezclado — el agrupado ordena.
+      vi.mocked(contractsApi.list).mockResolvedValue({
+        data: [CONTRACT_SIN_BARRIO, CONTRACT_CENTRO, CONTRACT_ALBERDI],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts')
+
+      await screen.findByTestId('contracts-table')
+      expect(neighborhoodHeadings()).toEqual(['Alberdi', 'Centro', 'Sin barrio'])
+    })
+
+    it('CA-85-02: cada fila muestra la dirección y el inquilino dentro de su grupo, sin fetches extra', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({
+        data: [CONTRACT_SIN_BARRIO, CONTRACT_CENTRO, CONTRACT_ALBERDI],
+        meta: {},
+      })
+
+      renderContractsApp('/contracts')
+
+      await screen.findByTestId('contracts-table')
+      const groups = screen.getAllByTestId('contracts-neighborhood-group')
+
+      // Alberdi
+      expect(within(groups[0]!).getByText('Av. Colón 1234')).toBeInTheDocument()
+      expect(within(groups[0]!).getByText('María López')).toBeInTheDocument()
+      // Centro
+      expect(within(groups[1]!).getByText('San Martín 45')).toBeInTheDocument()
+      expect(within(groups[1]!).getByText('Carlos Gómez')).toBeInTheDocument()
+      // Sin barrio
+      expect(within(groups[2]!).getByText('Ruta 20 km 5')).toBeInTheDocument()
+      expect(within(groups[2]!).getByText('Pedro Núñez')).toBeInTheDocument()
+
+      // Los nombres vienen denormalizados en el ContractSummary — el
+      // listado NO resuelve referencias con requests extra del cliente.
+      expect(propertiesApi.get).not.toHaveBeenCalled()
+      expect(peopleApi.getRenter).not.toHaveBeenCalled()
+    })
+
+    it('CA-85-03: el filtro de vencimientos sigue funcionando sobre el listado agrupado', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list)
+        .mockResolvedValueOnce({
+          data: [CONTRACT_SIN_BARRIO, CONTRACT_CENTRO, CONTRACT_ALBERDI],
+          meta: {},
+        })
+        .mockResolvedValue({ data: [CONTRACT_CENTRO], meta: {} })
+
+      renderContractsApp('/contracts')
+      const user = userEvent.setup()
+
+      await screen.findByTestId('contracts-table')
+      await user.type(screen.getByLabelText('Vencen dentro de (días)'), '60')
+
+      await waitFor(() => {
+        expect(contractsApi.list).toHaveBeenCalledWith(
+          expect.objectContaining({ expiring_in_days: 60 }),
+          expect.anything(),
+        )
+      })
+      await waitFor(() => {
+        expect(neighborhoodHeadings()).toEqual(['Centro'])
+      })
+      expect(screen.getByText('San Martín 45')).toBeInTheDocument()
+    })
+
+    it('CA-85-04: con contratos sin barrio únicamente, el único grupo es "Sin barrio"', async () => {
+      setSession(OWNER_SESSION)
+      mockOptionDefaults()
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [CONTRACT_SIN_BARRIO], meta: {} })
+
+      renderContractsApp('/contracts')
+
+      await screen.findByTestId('contracts-table')
+      expect(neighborhoodHeadings()).toEqual(['Sin barrio'])
+    })
+  })
+
+  // ── Issue #86 (espejo de back#124, decisión #130) — eliminar contrato ───
+  describe('Issue #86 — eliminar contrato (permiso contract:delete)', () => {
+    it('CA-86-01: sin contract:delete el botón "Eliminar contrato" no existe (owner con terminate y admin con manage)', async () => {
+      // Owner sin contract:delete (tiene terminate/manage): no ve eliminar.
+      setSession(OWNER_SESSION)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+      await screen.findByTestId('contract-detail')
+      expect(screen.queryByRole('button', { name: 'Eliminar contrato' })).not.toBeInTheDocument()
+
+      // Admin (contract:manage): tampoco.
+      setSession(ADMIN_SESSION)
+      renderContractsApp('/contracts/c-2')
+      await waitFor(() => {
+        expect(screen.getAllByTestId('contract-detail').length).toBeGreaterThan(1)
+      })
+      expect(screen.queryByRole('button', { name: 'Eliminar contrato' })).not.toBeInTheDocument()
+    })
+
+    it('CA-86-02: con contrato ACTIVO la confirmación fuerte sólo habilita el botón al tipear ELIMINAR', async () => {
+      setSession(OWNER_SESSION_WITH_DELETE)
+      mockDetailLinkDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Eliminar contrato' }))
+
+      // El modal explica las consecuencias antes de habilitar nada.
+      expect(await screen.findByText('Eliminar contrato activo')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          /se detiene la generación de meses futuros; los cobros y liquidaciones ya emitidos se conservan/i,
+        ),
+      ).toBeInTheDocument()
+
+      const confirmButton = screen.getByRole('button', { name: 'Eliminar definitivamente' })
+      expect(confirmButton).toBeDisabled()
+
+      // Palabra incorrecta: sigue deshabilitado.
+      const input = screen.getByLabelText('Para confirmar, escribí ELIMINAR')
+      await user.type(input, 'eliminar')
+      expect(confirmButton).toBeDisabled()
+
+      // Palabra exacta: se habilita.
+      await user.clear(input)
+      await user.type(input, 'ELIMINAR')
+      expect(confirmButton).toBeEnabled()
+
+      // Nada se disparó todavía.
+      expect(contractsApi.remove).not.toHaveBeenCalled()
+    })
+
+    it('CA-86-03: flujo completo — eliminar un contrato activo tipeando ELIMINAR vuelve al listado', async () => {
+      setSession(OWNER_SESSION_WITH_DELETE)
+      mockDetailLinkDefaults()
+      mockOptionDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: ACTIVE_CONTRACT })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.remove).mockResolvedValueOnce(undefined)
+      // Tras eliminar, el listado ya no incluye el contrato (el back lo
+      // excluye; acá el mock lo refleja).
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-2')
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Eliminar contrato' }))
+      await user.type(screen.getByLabelText('Para confirmar, escribí ELIMINAR'), 'ELIMINAR')
+      await user.click(screen.getByRole('button', { name: 'Eliminar definitivamente' }))
+
+      await waitFor(() => {
+        expect(contractsApi.remove).toHaveBeenCalledWith('c-2')
+      })
+      // Volvió al listado de contratos.
+      expect(await screen.findByRole('button', { name: 'Nuevo contrato' })).toBeInTheDocument()
+    })
+
+    it('CA-86-04: un contrato NO activo usa la confirmación de 2 pasos existente (sin tipeo)', async () => {
+      setSession(OWNER_SESSION_WITH_DELETE)
+      mockDetailLinkDefaults()
+      mockOptionDefaults()
+      vi.mocked(contractsApi.get).mockResolvedValue({ data: DRAFT_CONTRACT_ARS })
+      vi.mocked(contractsApi.listAdjustments).mockResolvedValue({ data: [], meta: {} })
+      vi.mocked(contractsApi.remove).mockResolvedValueOnce(undefined)
+      vi.mocked(contractsApi.list).mockResolvedValue({ data: [], meta: {} })
+
+      renderContractsApp('/contracts/c-1')
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Eliminar contrato' }))
+
+      // Confirmación de 2 pasos (ConfirmDeleteButton) — sin modal de tipeo.
+      expect(contractsApi.remove).not.toHaveBeenCalled()
+      expect(
+        screen.getByText('¿Eliminar este contrato? La baja es lógica: su historial se conserva.'),
+      ).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+      await waitFor(() => {
+        expect(contractsApi.remove).toHaveBeenCalledWith('c-1')
+      })
+    })
   })
 })

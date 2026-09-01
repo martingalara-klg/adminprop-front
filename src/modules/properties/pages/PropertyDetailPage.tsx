@@ -3,7 +3,9 @@
 // RF-03 — CA-01-02/03/04/05: ficha consolidada de la propiedad — datos +
 // cuentas de servicio + contrato vigente + historial de reparaciones +
 // conceptos de cargos recurrentes. Edición y baja (soft delete, con
-// 409 ENTITY_HAS_DEPENDENCIES si hay contrato activo) también viven acá.
+// 422 ENTITY_HAS_ACTIVE_CONTRACT si hay contrato activo — issue #86,
+// back#124: reemplaza el 409 ENTITY_HAS_DEPENDENCIES de este caso)
+// también viven acá.
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
@@ -24,6 +26,7 @@ import {
   EditableSection,
 } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
+import { resolveEntityDeleteErrorMessage } from '@/shared/utils/activeContractMessage'
 import type { PropertyUpdate, PropertyServiceAccountCreate } from '@/api/properties.api'
 import type { CreateRecurringChargeInput } from '../schemas/property.schema'
 
@@ -133,7 +136,9 @@ export function PropertyDetailPage() {
     setDeleteError(null)
     deleteProperty.mutate(propertyId, {
       onSuccess: () => navigate('/properties'),
-      onError: (error) => setDeleteError(resolveErrorMessage(error)),
+      // Issue #86 (back#124): `422 ENTITY_HAS_ACTIVE_CONTRACT` arma el
+      // mensaje legible desde `details.active_contracts[]` — nunca JSON.
+      onError: (error) => setDeleteError(resolveEntityDeleteErrorMessage(error)),
     })
   }
 

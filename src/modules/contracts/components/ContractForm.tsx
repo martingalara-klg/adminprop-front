@@ -28,6 +28,7 @@
 //      completarla primero.
 //   4. Labels de tramo: "Valor locativo (mes – mes)" (es-AR).
 import { useEffect } from 'react'
+import type { ClipboardEvent, KeyboardEvent } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, Input, Label, MoneyInput } from '@/shared/components'
@@ -91,6 +92,7 @@ export function ContractForm({
     handleSubmit,
     watch,
     setError,
+    setValue,
     formState: { errors },
   } = useForm<CreateContractInput>({
     resolver: zodResolver(createContractSchema),
@@ -142,6 +144,35 @@ export function ContractForm({
 
   const historicalRootError = (errors.historical_amounts as unknown as { message?: string })
     ?.message
+
+  // Issue #84: la frecuencia de ajuste es un entero (meses) — además de
+  // la validación Zod, la UX impide tipear/pegar caracteres no numéricos.
+  function handleFrequencyKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    // No interceptar atajos (Ctrl/Cmd+C/V/A/Z…) ni teclas de control
+    // (Backspace, Tab, flechas… — todas con `key.length > 1`).
+    if (event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.key.length === 1 && !/[0-9]/.test(event.key)) {
+      event.preventDefault()
+    }
+  }
+
+  function handleFrequencyPaste(event: ClipboardEvent<HTMLInputElement>) {
+    const pasted = event.clipboardData.getData('text')
+    if (/^[0-9]*$/.test(pasted)) return
+    // Pegado con caracteres no numéricos: se filtran y sólo se insertan
+    // los dígitos (en la posición del cursor / reemplazando la selección).
+    event.preventDefault()
+    const digits = pasted.replace(/[^0-9]/g, '')
+    if (!digits) return
+    const el = event.currentTarget
+    const start = el.selectionStart ?? el.value.length
+    const end = el.selectionEnd ?? el.value.length
+    const nextValue = el.value.slice(0, start) + digits + el.value.slice(end)
+    setValue('adjustment_frequency_months', nextValue, {
+      shouldDirty: true,
+      shouldValidate: false,
+    })
+  }
 
   return (
     <form
@@ -277,7 +308,10 @@ export function ContractForm({
             <Label htmlFor="contract-adjustment-frequency">Frecuencia de ajuste (meses)</Label>
             <Input
               id="contract-adjustment-frequency"
+              inputMode="numeric"
               aria-invalid={!!errors.adjustment_frequency_months}
+              onKeyDown={handleFrequencyKeyDown}
+              onPaste={handleFrequencyPaste}
               {...register('adjustment_frequency_months')}
             />
             <FieldError message={errors.adjustment_frequency_months?.message} />
