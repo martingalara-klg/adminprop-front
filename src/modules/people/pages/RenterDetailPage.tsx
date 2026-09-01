@@ -15,6 +15,7 @@ import {
   EditableSection,
 } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
+import { resolveEntityDeleteErrorMessage } from '@/shared/utils/activeContractMessage'
 import type { UpdateRenterInput } from '../schemas/people.schema'
 
 import { RenterContactForm } from '../components/RenterContactForm'
@@ -78,7 +79,9 @@ export function RenterDetailPage() {
     setDeleteError(null)
     deleteRenter.mutate(renter.id, {
       onSuccess: () => navigate('/people/renters'),
-      onError: (error) => setDeleteError(resolveErrorMessage(error)),
+      // Issue #86 (back#124): `422 ENTITY_HAS_ACTIVE_CONTRACT` arma el
+      // mensaje legible desde `details.active_contracts[]` — nunca JSON.
+      onError: (error) => setDeleteError(resolveEntityDeleteErrorMessage(error)),
     })
   }
 

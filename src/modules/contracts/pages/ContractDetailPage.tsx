@@ -12,7 +12,7 @@
 // (back#105), libre deuda del CONTRATO (back#104) e historial de
 // valores locativos mes a mes (back#106).
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { usePermission } from '@/shared/auth/usePermission'
 import { Spinner, ErrorState, ForbiddenState, BackLink } from '@/shared/components'
 import { resolveErrorMessage } from '@/api/resolveErrorMessage'
@@ -21,6 +21,7 @@ import { ADJUSTMENT_INDEX_LABELS, type TerminateContractInput } from '../schemas
 
 import { ContractStateBadge } from '../components/ContractStateBadge'
 import { ContractLifecycleActions } from '../components/ContractLifecycleActions'
+import { DeleteContractAction } from '../components/DeleteContractAction'
 import { ContractOverlapError } from '../components/ContractOverlapError'
 import { ContractAdjustmentsHistory } from '../components/ContractAdjustmentsHistory'
 import { ContractDebtCertificateButton } from '../components/ContractDebtCertificateButton'
@@ -29,6 +30,7 @@ import { useContractDetail } from '../hooks/useContractDetail'
 import { useContractAdjustmentsHistory } from '../hooks/useContractAdjustmentsHistory'
 import { useActivateContract } from '../hooks/useActivateContract'
 import { useTerminateContract } from '../hooks/useTerminateContract'
+import { useDeleteContract } from '../hooks/useDeleteContract'
 import { useContractPropertyLink } from '../hooks/useContractPropertyLink'
 import { useContractRenterLink } from '../hooks/useContractRenterLink'
 
@@ -53,9 +55,13 @@ function formatAdjustmentIndex(
 
 export function ContractDetailPage() {
   const { contractId } = useParams<{ contractId: string }>()
+  const navigate = useNavigate()
   const canReadContracts = usePermission('contract:read')
   const canManageContracts = usePermission('contract:manage')
   const canTerminateContract = usePermission('contract:terminate')
+  // Issue #86 (back#124, decisión #130): permiso atómico exclusivo de
+  // owner — mismo patrón que `contract:terminate`.
+  const canDeleteContract = usePermission('contract:delete')
   const canReadProperties = usePermission('property:read')
   const canReadRenters = usePermission('renter:read')
 
@@ -73,9 +79,11 @@ export function ContractDetailPage() {
 
   const activateContract = useActivateContract()
   const terminateContract = useTerminateContract()
+  const deleteContract = useDeleteContract()
 
   const [activateError, setActivateError] = useState<unknown>(null)
   const [terminateError, setTerminateError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   if (!canReadContracts) {
     return (
@@ -104,6 +112,17 @@ export function ContractDetailPage() {
       { contractId, payload: values },
       { onError: (error) => setTerminateError(resolveErrorMessage(error)) },
     )
+  }
+
+  // Issue #86: tras eliminar, volver al listado (el contrato ya no existe
+  // para la UI — su detalle respondería 404).
+  function handleDeleteContract() {
+    if (!contractId) return
+    setDeleteError(null)
+    deleteContract.mutate(contractId, {
+      onSuccess: () => navigate('/contracts'),
+      onError: (error) => setDeleteError(resolveErrorMessage(error)),
+    })
   }
 
   const property = propertyQuery.data?.data
@@ -215,6 +234,18 @@ export function ContractDetailPage() {
             onTerminate={handleTerminate}
           />
           {activateError ? <ContractOverlapError error={activateError} /> : null}
+        </section>
+      ) : null}
+
+      {canDeleteContract ? (
+        <section className="flex flex-col gap-2">
+          <DeleteContractAction
+            status={contract.status}
+            canDelete={canDeleteContract}
+            isDeleting={deleteContract.isPending}
+            errorMessage={deleteError}
+            onDelete={handleDeleteContract}
+          />
         </section>
       ) : null}
 
