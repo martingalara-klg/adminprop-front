@@ -361,6 +361,49 @@ describe('Módulo 2 — Personas (#9)', () => {
     })
   })
 
+  // Issue #86 (back#124, decisión #130, sdd_03 v1.17): el bloqueo por
+  // contrato activo del inquilino es `422 ENTITY_HAS_ACTIVE_CONTRACT`
+  // con `details.active_contracts[]` — la UI arma un mensaje legible
+  // desde `details`, nunca JSON.
+  it('CA-02-06 (#86): borrar un inquilino con contrato activo muestra el mensaje legible de ENTITY_HAS_ACTIVE_CONTRACT', async () => {
+    setSession(OWNER_SESSION)
+    vi.mocked(peopleApi.getRenter).mockResolvedValue({ data: RENTER_DETAIL })
+    vi.mocked(peopleApi.getRenterDebt).mockResolvedValue({ data: [] })
+    vi.mocked(peopleApi.deleteRenter).mockRejectedValueOnce(
+      new AdminPropApiError('ENTITY_HAS_ACTIVE_CONTRACT', 422, 'Entity has active contract', null, {
+        entity_type: 'renter',
+        entity_id: 'r-1',
+        active_contracts: [
+          {
+            contract_id: 'c-1',
+            property_id: 'p-1',
+            property_address: 'Av. Siempreviva 742',
+            renter_id: 'r-1',
+            renter_name: 'María López',
+            start_date: '2026-01-01',
+            end_date: '2026-12-31',
+          },
+        ],
+      }),
+    )
+
+    renderPeopleApp('/people/renters/r-1')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Eliminar inquilino' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'No se puede eliminar: tiene un contrato activo (Av. Siempreviva 742 — María López).',
+        ),
+      ).toBeInTheDocument()
+    })
+    // Nada de JSON en pantalla (precedente #70).
+    expect(screen.queryByText(/active_contracts/)).not.toBeInTheDocument()
+  })
+
   it('CA-02-07: un maintenance no ve propietarios ni dispara el request', async () => {
     setSession(MAINTENANCE_SESSION)
 
